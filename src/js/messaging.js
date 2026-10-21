@@ -41,7 +41,7 @@ import {
 import cacheStorage from './cachestorage.js';
 import cosmeticFilteringEngine from './cosmetic-filtering.js';
 import { denseBase64 } from './base64-custom.js';
-import { filteringBehaviorChanged } from './broadcast.js';
+import { filteringBehaviorChanged, broadcast } from './broadcast.js';
 import { getTrustedTokens } from './trusted-tokens.js';
 import htmlFilteringEngine from './html-filtering.js';
 import { i18n$ } from './i18n.js';
@@ -56,6 +56,7 @@ import { staticFilteringReverseLookup } from './reverselookup.js';
 import staticNetFilteringEngine from './static-net-filtering.js';
 import webRequest from './traffic.js';
 import µb from './background.js';
+import davSync from './davsync.js';
 
 /******************************************************************************/
 
@@ -217,6 +218,7 @@ const onMessage = function(request, sender, callback) {
         µb.trustedSites.fromText(request.whitelist);
         µb.saveWhitelist();
         filteringBehaviorChanged();
+        broadcast({ what: 'davLocalDataChanged' });
         break;
 
     case 'toggleHostnameSwitch':
@@ -246,6 +248,8 @@ const onMessage = function(request, sender, callback) {
             response.canLeakLocalIPAddresses =
                 vAPI.browserSettings.canLeakLocalIPAddresses === true;
         }
+        // DAV-Sync fork: settings edits are user data changes.
+        broadcast({ what: 'davLocalDataChanged' });
         break;
 
     default:
@@ -1449,6 +1453,7 @@ const onMessage = function(request, sender, callback) {
         }
         µb.changeUserSettings('userFiltersTrusted', request.trusted || false);
         return µb.saveUserFilters(request.content).then(result => {
+            broadcast({ what: 'davLocalDataChanged' });
             callback(result);
         });
 
@@ -1488,6 +1493,7 @@ const onMessage = function(request, sender, callback) {
         cosmeticFilteringEngine.removeFromSelectorCache('*');
         modifyRuleset(request);
         response = getRules();
+        broadcast({ what: 'davLocalDataChanged' });
         break;
 
     case 'supportUpdateNow': {
@@ -1533,6 +1539,16 @@ const onMessage = function(request, sender, callback) {
     case 'writeHiddenSettings':
         µb.changeHiddenSettings(µb.hiddenSettingsFromString(request.content));
         break;
+
+    // DAV-Sync fork: WebDAV auto-sync management
+    case 'davSyncGetStatus':
+        return davSync.getStatus().then(callback);
+
+    case 'davSyncSetConfig':
+        return davSync.setConfig(request).then(callback);
+
+    case 'davSyncNow':
+        return davSync.syncNow().then(callback);
 
     default:
         return vAPI.messaging.UNHANDLED;

@@ -67,6 +67,22 @@
     <div class="li"><label><span class="input checkbox"><input type="checkbox" data-setting-name="advancedUserEnabled" data-setting-type="bool"><svg viewBox="0 0 24 24"><path d="M1.73,12.91 8.1,19.28 22.79,4.59"/></svg></span><span><span data-i18n="settingsAdvancedUserPrompt"></span>&nbsp;<a class="fa-icon info" href="advanced-settings.html" data-i18n-title="settingsAdvancedUserSettings">cogs</a></span></label></div>
 </div>
 <hr>
+<div id="davSync" class="fieldset">
+    <div class="fieldset-header">WebDAV 自动同步</div>
+    <div class="li"><label><span class="input checkbox"><input type="checkbox" id="davSyncEnabled"><svg viewBox="0 0 24 24"><path d="M1.73,12.91 8.1,19.28 22.79,4.59"/></svg></span><span>启用 WebDAV 自动同步（跨浏览器：Chrome / Kiwi / 百分 等）</span></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">服务器 URL</span><input type="url" id="davSyncUrl" placeholder="https://dav.jianguoyun.com/dav/" style="flex:1;min-width:20em;"></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">用户名</span><input type="text" id="davSyncUsername" autocomplete="off" style="flex:1;min-width:20em;"></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">密码（应用密码）</span><input type="password" id="davSyncPassword" autocomplete="off" style="flex:1;min-width:20em;"></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">设备名称</span><input type="text" id="davSyncDeviceName" placeholder="留空则使用平台名" style="flex:1;min-width:20em;"></label></div>
+    <div class="li">
+        <button type="button" id="davSyncSave">保存</button>
+        <button type="button" id="davSyncNow">立即同步</button>
+        <span id="davSyncStatus" style="margin-left:1em;"></span>
+    </div>
+    <div class="li synopsis"><legend>同步内容：我的过滤 / 我的规则 / 白名单 / 过滤列表选择 / 常规设置。云端文件与官方“备份到文件”格式互通。启动后与每 30 分钟自动同步一次；本地有改动约 1 分钟后自动上传。</legend></div>
+</div>
+
+<hr>
 <div id="localData" class="fieldset">
     <div>
         <div class="li" id="storageUsed"></div>

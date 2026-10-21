@@ -35,6 +35,10 @@ import './tab.js';
 import './ublock.js';
 import './utils.js';
 
+// DAV-Sync fork: WebDAV auto-sync engine + vAPI.cloud router
+import './davsync.js';
+import './dav-cloud.js';
+
 import {
     permanentFirewall,
     permanentSwitches,

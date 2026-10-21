@@ -324,3 +324,54 @@ dom.on(
 );
 
 /******************************************************************************/
+// WebDAV auto-sync configuration pane (DAV-Sync fork)
+
+const davStatusText = status => {
+    if ( status.enabled !== true ) { return '未启用'; }
+    if ( status.lastError ) { return `错误：${status.lastError}`; }
+    if ( status.lastSyncTime === 0 ) { return '尚未同步'; }
+    const t = new Date(status.lastSyncTime).toLocaleString();
+    const dir = {
+        push: '已上传',
+        pull: '已从云端应用',
+        none: '无变化',
+    }[status.lastDirection] || '';
+    return `${dir} · ${t}`;
+};
+
+const refreshDavStatus = function(status) {
+    qs$('#davSyncEnabled').checked = status.enabled === true;
+    if ( status.url ) { qs$('#davSyncUrl').value = status.url; }
+    if ( status.username ) { qs$('#davSyncUsername').value = status.username; }
+    if ( status.deviceName ) { qs$('#davSyncDeviceName').value = status.deviceName; }
+    dom.text('#davSyncStatus', davStatusText(status));
+};
+
+vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
+    if ( status instanceof Object ) { refreshDavStatus(status); }
+});
+
+dom.on('#davSyncSave', 'click', ( ) => {
+    const status = vAPI.messaging.send('dashboard', {
+        what: 'davSyncSetConfig',
+        enabled: qs$('#davSyncEnabled').checked,
+        url: qs$('#davSyncUrl').value,
+        username: qs$('#davSyncUsername').value,
+        password: qs$('#davSyncPassword').value,
+        deviceName: qs$('#davSyncDeviceName').value,
+    }).then(result => {
+        if ( result instanceof Object ) {
+            refreshDavStatus(result);
+            qs$('#davSyncPassword').value = '';
+        }
+    });
+});
+
+dom.on('#davSyncNow', 'click', ( ) => {
+    dom.text('#davSyncStatus', '同步中…');
+    vAPI.messaging.send('dashboard', { what: 'davSyncNow' }).then(result => {
+        if ( result instanceof Object ) { refreshDavStatus(result); }
+    });
+});
+
+/******************************************************************************/
