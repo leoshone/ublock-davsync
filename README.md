@@ -42,7 +42,7 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 | `src/js/davsync.js` | WebDAV 客户端、自动同步调度、快照生成/应用 |
 | `src/js/dav-cloud.js` | 把 uBO 云存储路由接到 WebDAV |
 | `src/js/settings.js` / `src/settings.html` | 设置页 DAV-Sync 配置 UI |
-| `docs/DAVSYNC-HOST-COMPATIBILITY-AND-SIDELOAD.md` | 载体兼容性验证 + Chrome 侧载方法（持续迭代） |
+| `docs/DAVSYNC-TESTING.md` | 载体兼容性验证 + Chrome 侧载方法（持续迭代） |
 | `ARTIFACTS.md` | 产物索引与换机重建指南 |
 
 ### 已知限制
