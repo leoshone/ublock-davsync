@@ -11,7 +11,7 @@
 > 4. **功能 E2E：单端 push、跨端 pull、双向同步均已真实跑通（第 9/10 节）**。
 >
 > 对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
-> 产物：`dist/build/uBlock0_v1.75.1.16.chromium.zip` 及解包目录
+> 产物：`dist/build/uBlock0.davsync_v1.75.1.16.chromium.zip` 及解包目录
 > 环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
 
 ## 总结论（2026-10-22 更新）
@@ -324,7 +324,7 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 | 开发者模式开启时 | ✅ 安装成功，且**状态持久 ENABLED**（区别于 --load-extension 的会话级 DISABLED） |
 | 扩展 ID | `odecihgahfphabajblgnmopeibmkhifp`（key 派生，全平台一致）✅ |
 
-产物：`dist/build/uBlock0_v1.75.1.16.chromium.crx`（已入 artifacts 分支与 Release，命名对齐官方 `uBlock0_v<版本>.<平台>` 规范）。
+产物：`dist/build/uBlock0.davsync_v1.75.1.16.chromium.crx`（已入 artifacts 分支与 Release，命名对齐官方 `uBlock0_v<版本>.<平台>` 规范）。
 打包方法与 key 管理见 `.agents/skills/chrome-unpacked-sideload/SKILL.md` 桌面章节。
 
 ### 11.4 Turbo 命令行安装路径的限制（补充实测）
@@ -382,7 +382,7 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 - **davsync 运行时验证**：WebDAV 配置需通过 uBO 设置页 UI 填写（Firefox 无 CDP 自动化
   工具链）；坚果云 Android 同款证书链问题在 Firefox 同样存在（Firefox 也不做 AIA 补链，
   预期 SEC_ERROR_UNKNOWN_ISSUER）。换 WebDAV 服务商后可用同一流程验证；
-- **产物**：`uBlock0_v1.75.1.16.firefox.xpi`（已入 artifacts 分支与 Release）；
+- **产物**：`uBlock0.davsync_v1.75.1.16.firefox.xpi`（已入 artifacts 分支与 Release）；
   gecko id = `uBlock0@raymondhill.net`（沿用上游，Firefox 侧无固定 ID 需求）。
 
 ### 12.3 更新后的全平台矩阵
