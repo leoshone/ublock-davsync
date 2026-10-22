@@ -358,3 +358,41 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 - **Turbo 154**：policy 服务被剥离，自签 crx 离线安装无绕过手段 ❌，只能 --load-extension（会话级）
 - 已在 Turbo 官方 issue #724 补充该测试结果，请官方提供豁免开关或修复
 
+## 12. Quetta（模拟器）与 Firefox（桌面）补测 —— 2026-10-22 追加
+
+### 12.1 Quetta 2.0.8（arm64）@ MuMu x86 —— 维持不可用结论
+
+- Quetta 官方只发 ARM 包（ARM7/ARM8），无 x86 构建；渲染进程 SIGSYS 全灭（第 2 节结论）复现；
+- 尝试 root 直解 davsync zip 到 `app_chrome/Default/Extensions/<id>/<ver>_0/` 并注入
+  Preferences（含完整 manifest 快照 + 权限 + Chrome epoch 时间戳），重启后扩展未被激活
+  （Extension State 中无该 ID，Local Extension Settings 目录未创建）；
+- 上轮会话的注入成功经验在本轮浏览器状态下不可复现，深挖成本高于收益。
+- **结论维持：Quetta 在 x86 模拟器不可用；ARM 真机可测（未验证）。**
+
+### 12.2 Firefox 159（Windows）—— 构建 ✅ 加载 ✅ 运行 ✅ / 同步待配置验证
+
+- **Firefox 版构建**：`tools/make-firefox.sh` 流程在 Windows Git Bash 下可跑
+  （platform/firefox 覆盖文件 + make-firefox-meta.py 生成 gecko manifest）；
+  davsync.js 用标准 webext API，无需任何改动即可进入 Firefox 构建模块图；
+- **加载**：Firefox 74+ 已禁 sideload（xpi 放 profile/extensions 无效），用官方
+  `web-ext run`（npm web-ext）加载成功——`Installed ... as a temporary add-on`，
+  无任何加载错误（davsync.js 在模块图中，语法/依赖错误会导致整个 uBO 拒载）；
+- **临时安装 = 会话级**（web-ext run 特性，退出即失效），与 Chromium 的
+  --load-extension 行为一致；
+- **davsync 运行时验证**：WebDAV 配置需通过 uBO 设置页 UI 填写（Firefox 无 CDP 自动化
+  工具链）；坚果云 Android 同款证书链问题在 Firefox 同样存在（Firefox 也不做 AIA 补链，
+  预期 SEC_ERROR_UNKNOWN_ISSUER）。换 WebDAV 服务商后可用同一流程验证；
+- **产物**：`uBlock0.davsync-1.75.1.16.firefox.xpi`（已入 artifacts 分支与 Release）；
+  gecko id = `uBlock0@raymondhill.net`（沿用上游，Firefox 侧无固定 ID 需求）。
+
+### 12.3 更新后的全平台矩阵
+
+| 平台 | 载体 | 构建 | 加载 | 同步 E2E |
+|---|---|---|---|---|
+| Windows | 百分 150 | chromium | ✅ crx 拖拽 | ✅ |
+| Windows | Turbo 154 | chromium | ✅ --load-extension | ✅ |
+| Windows | Firefox 159 | **firefox（本节）** | ✅ web-ext 临时加载 | ⏳ 待配置验证 |
+| Android 模拟器 | Kiwi x86 | chromium | ✅ zip 按钮 | ⚠️ 证书阻断 |
+| Android 模拟器 | Quetta arm64 | chromium | ❌ SIGSYS + 注入失效 | ❌ |
+| Windows | Chrome 155 | chromium | ❌ MV2 移除 | — |
+

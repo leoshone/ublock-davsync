@@ -37,7 +37,7 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 | **`.crx`** | 百分、360 极速等保留 MV2 的国产 Chromium 壳 | 扩展页开启「开发者模式」→ 拖入 crx → 确认。安装后**持久生效**，重启不丢 |
 | **`.zip`** | Kiwi Browser（Android） | push 到设备 → 扩展页「+ (from .zip/.crx/.user.js)」选择 |
 | 解包目录 | Turbo 等不支持 crx 安装的壳 | `--load-extension=<解包目录>` 启动（会话级），详见[载体测试文档](docs/DAVSYNC-TESTING.md)第 11 节 |
-| ~~`.xpi`~~ | Firefox 系备用（未实测） | 同 zip，改名即可 |
+| **`firefox.xpi`** | Firefox 115+（桌面） | [web-ext run](https://extensionworkshop.com/documentation/develop/getting-started-with-web-ext/) 临时加载（会话级）；运行时同步待验证 |
 
 > 各浏览器对 MV2/自签 crx 的支持差异与绕过方法，见 `docs/DAVSYNC-TESTING.md` 第 11 节（如 Turbo 需 `--load-extension`，其 crx 安装被策略拒绝且 policy 服务被剥离）。
 
@@ -54,6 +54,7 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 | Windows | 百分浏览器 150 | ✅ crx 拖拽 | ✅ 通过 |
 | Windows | Turbo 154 | ✅ --load-extension（会话级） | ✅ 通过 |
 | Android (MuMu x86) | Kiwi x86 | ✅ zip 加载 | ⚠️ 安装运行正常；同步被坚果云 Android 证书链问题阻断（[详见](docs/DAVSYNC-TESTING.md)#7.3，换其他 WebDAV 服务商可解） |
+| Windows | Firefox 159 | ✅ web-ext 临时加载 | ⏳ 待配置验证 |
 | Windows | Chrome 155+ | ❌ MV2 已移除 | — |
 
 ### 关键文件
