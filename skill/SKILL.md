@@ -166,4 +166,4 @@ img.save(out_path)
 
 - 被测扩展：本仓库构建产物 `dist/build/uBlock0.davsync-*.zip` 解包目录（uBlock0.chromium/）。
 - 测试 profile：`_tmp/davtest/win-chrome/`；CDP 端口 9222。
-- 完整兼容性验证与侧载结论见 `docs/DAVSYNC-COMPAT-AND-SIDELOAD-2026-10-22.md`。
+- 完整兼容性验证与侧载结论见 `docs/DAVSYNC-HOST-COMPATIBILITY-AND-SIDELOAD.md`。

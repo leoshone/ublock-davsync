@@ -1,6 +1,6 @@
 # uBlock DAV-Sync 测试产物与可复用工具
 
-> 主仓库：[leoshone/ublock-davsync](https://github.com/leoshone/ublock-davsync)（fork 源码 + 兼容性验证与侧载方法 `docs/DAVSYNC-COMPAT-AND-SIDELOAD-2026-10-22.md`）
+> 主仓库：[leoshone/ublock-davsync](https://github.com/leoshone/ublock-davsync)（fork 源码 + 兼容性验证与侧载方法 `docs/DAVSYNC-HOST-COMPATIBILITY-AND-SIDELOAD.md`）
 > 本目录：真机测试过程中沉淀的**可复用产物**——构建包、密钥、自动化脚本、WorkBuddy skill。
 
 ## 目录
