@@ -294,3 +294,25 @@ extensions.settings.<ext-id>.state = 1
 - davsync 配置键：`davSyncConfig`（storage.local）；状态键：`davSyncState`。
 - 修正（2026-10-22）：Turbo 亦可用 Preferences 预写法（本次双向测试未试，理论同百分；
   若 Turbo 有 HMAC 校验则回落会话内 setEnabled）。
+
+### CRX3 打包与拖拽安装（实测可行 ✅）
+
+**裸 zip/.xpi 拖到扩展页不触发安装**——Chromium 拖拽安装只认 CRX3 格式（`Cr24` magic + protobuf header + zip payload）。
+
+打包（有私钥 pem 即可，工具链在 `_tmp/node_modules/crx3`）：
+```js
+const writeCRX3 = require('<path>/node_modules/crx3/lib/writeCRX3File.js');
+writeCRX3(recursiveFileList, {
+  keyPath: '<key>.pem',
+  crxPath: '<out>.crx',
+  zipPath: '<tmp>.zip',
+})
+```
+- manifest.json 带 `key` 字段（RSA 公钥 base64）→ 扩展 ID 固定可预测；
+- CRX3 头结构：`Cr24` + u32 version(3) + u32 headerLen + protobuf{ field2: AsymmetricKeyProof{pubkey(1), sig(2)}, field10000: SignedData{crx_id(1)} }；sig = RSA-SHA256(SignedData 原始字节)；
+- **安装前提：目标 profile 的「开发者模式」必须开启**，否则报 `CRX_SIGNATURE_VERIFICATION_FAILED`（未上架商店的自签 crx 被 InstallVerifier 拒）。
+
+**程序化安装路径**（拖拽本身是浏览器 UI 行为，无法 CDP 模拟）：
+把 crx 路径作为命令行参数传给浏览器 → 打开扩展页并弹标准确认框 → 点击「添加扩展程序」完成。
+crx 正规安装后状态**持久 ENABLED**（区别于 --load-extension 的会话级 DISABLED），且 Preferences 有持久条目。
+

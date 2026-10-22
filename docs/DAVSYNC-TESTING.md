@@ -298,3 +298,28 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 - **2026-10-22 上午**：首版。Chrome 155 / MuMu（Quetta、Chromium 110）/ 坚果云 WebDAV 兼容性验证；沉淀 Chrome 137+ 侧载自动化方法；browser-skill 评估（第 6 节）。
 - **2026-10-22 午后**：Kiwi x86 实测（第 7 节，推翻"仅 ARM"结论；发现坚果云 Android 证书链缺陷）；floccus 源码参考分析（第 8 节）；Turbo 154 E2E 首次真实同步成功，修复 3 个 fork bug（第 9 节）；davsync.js 落地 floccus 式 4 项加固。
 - **2026-10-22 下午**：百分 × Turbo 双向同步 E2E 全通（第 10 节）；SKILL 沉淀桌面国产浏览器路线与 Preferences 预写法。
+
+## 11. CRX3 打包与拖拽安装 —— 2026-10-22 追加（验证通过 ✅）
+
+用户反馈"原版 uBO 的 .crx 可以拖拽安装，我们的 .xpi 不行"。
+
+### 11.1 根因
+
+**Chromium 拖拽安装只认 CRX3 格式**（`Cr24` magic + protobuf header + zip payload）。裸 zip/.xpi 拖进扩展页不会触发任何安装流程。
+
+### 11.2 解决
+
+用自签 RSA 密钥（manifest 注入 `key` 字段固定扩展 ID `odecihgahfphabajblgnmopeibmkhifp`）+ crx3 npm 工具签出 CRX3。结构自检与原版 uBO crx 完全对齐（field2 len556 + field10000 len18）。
+
+### 11.3 百分实测结论
+
+| 项 | 结果 |
+|---|---|
+| crx 路径作命令行参数传给百分 | ✅ 弹标准「要添加 uBlock Origin development build 吗？」确认框 |
+| 开发者模式关闭时 | ❌ `CRX_SIGNATURE_VERIFICATION_FAILED`（InstallVerifier 拒绝未上架商店的自签包） |
+| 开发者模式开启时 | ✅ 安装成功，且**状态持久 ENABLED**（区别于 --load-extension 的会话级 DISABLED） |
+| 扩展 ID | `odecihgahfphabajblgnmopeibmkhifp`（key 派生，全平台一致）✅ |
+
+产物：`dist/build/uBlock0.davsync-1.75.1.16.crx`（已入 artifacts 分支）。
+打包方法与 key 管理见 `.agents/skills/chrome-unpacked-sideload/SKILL.md` 桌面章节。
+
