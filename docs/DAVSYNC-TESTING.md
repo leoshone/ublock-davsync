@@ -323,3 +323,19 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 产物：`dist/build/uBlock0.davsync-1.75.1.16.crx`（已入 artifacts 分支）。
 打包方法与 key 管理见 `.agents/skills/chrome-unpacked-sideload/SKILL.md` 桌面章节。
 
+### 11.4 Turbo 命令行安装路径的限制（补充实测）
+
+Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSING`——Turbo 把它当
+「扩展更新请求」走 InstallVerifier 校验，要求 Google 商店 proof（Web Store 签名），
+自签 crx 无法通过。**这是策略限制，非格式问题**（crx3tool 官方工具签的包同样被拒，
+且 header 字段结构与原版 uBO crx 完全一致）。
+
+| 浏览器 | crx 安装路径 | 结果 |
+|---|---|---|
+| 百分 150 | 命令行参数 / 拖拽 | ✅ 弹确认框 → 安装（需开发者模式开） |
+| Turbo 154 | 命令行参数 | ❌ CRX_REQUIRED_PROOF_MISSING（策略拒绝） |
+| Turbo 154 | 拖拽 | 未测（理论同走 InstallVerifier，预期同样拒绝） |
+| Turbo 154 | **--load-extension + 会话内 setEnabled** | ✅ 可靠方案（已验证 E2E） |
+
+**推荐分发方式**：百分用 crx 拖拽/命令行；Turbo 继续用 --load-extension 脚本方案。
+
