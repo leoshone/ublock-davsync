@@ -10,7 +10,7 @@
 |---|---|
 | `master` | 完整 fork 源码（基于 gorhill/uBlock 1.75.1.16）+ `docs/` 验证文档 + `tools/` 打包脚本 |
 | `artifacts` | 可复用产物：crx/zip/xpi 构建包、扩展密钥、侧载脚本、WebDAV 冒烟测试 |
-| `Releases` | v1.75.1.16 正式发行（crx/zip/xpi 三件套 + 说明），日常下载用这个 |
+| `Releases` | v1.75.1.16 正式发行（crx / zip / firefox.xpi 三件套 + 说明），日常下载用这个 |
 
 ## master 分支关键文件
 
@@ -22,7 +22,8 @@
 | `src/js/messaging.js` + `src/js/start.js` | davSyncGetStatus / davSyncSetConfig / davSyncNow + 变更广播 |
 | `tools/make-packages.cjs` | 一键打包 .crx + .zip（crx3 npm 工具签名） |
 | `tools/make-packages.md` | 打包说明、各浏览器安装速查、踩坑记录 |
-| `docs/DAVSYNC-TESTING.md` | 全平台载体验证 + 侧载方法 + E2E 记录（1-11 节） |
+| `docs/DAVSYNC-TESTING.md` | 全平台载体验证 + 侧载方法 + E2E 记录（1-12 节） |
+| `scripts/dav-e2e.py` | CDP E2E 同步测试骨架（连 bg → 注配置 → 触发 → 轮询 state → 判定） |
 
 ## artifacts 分支内容（`build/`）
 
@@ -30,7 +31,7 @@
 |---|---|
 | `uBlock0.davsync-1.75.1.16.crx` | CRX3（crx3 工具签名）。百分等拖拽/命令行安装（需开发者模式开） |
 | `uBlock0.davsync-1.75.1.16.zip` | Kiwi zip 按钮加载 / 手工解压 --load-extension |
-| `uBlock0.davsync-1.75.1.16.xpi` | Firefox 系备用（未实测） |
+| `uBlock0.davsync-1.75.1.16.firefox.xpi` | Firefox/gecko 构建。web-ext 临时加载（会话级） |
 | `ublock-davsync.key` | RSA 私钥（PEM）。**保持不变则扩展 ID 恒定 = `odecihgahfphabajblgnmopeibmkhifp`**。敏感：仓库转公开前须移走 |
 
 > ⚠️ 2026-10-22 换过一次 key：旧 ID `mggocpoe...` 已废弃，现 ID `odecihgahfphabajblgnmopeibmkhifp`。
@@ -42,6 +43,7 @@
 |---|---|
 | `dav-smoke-test.sh` | 坚果云/通用 WebDAV 连通性五步测试 |
 | `ublock-sideload.py` | Chrome 137+ 未打包扩展自动化加载（UIA + SendInput + WM_SETTEXT） |
+| `dav-e2e.py`（master `scripts/` 与 artifacts `scripts/` 各一份） | CDP E2E 同步测试骨架：注入配置 → 触发 → 轮询 state → 判定 PASS/FAIL |
 
 ## 重建命令（换电脑后从源码重构建）
 
