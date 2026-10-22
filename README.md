@@ -39,6 +39,8 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 | 解包目录 | Turbo 等不支持 crx 安装的壳 | `--load-extension=<解包目录>` 启动（会话级），详见[载体测试文档](docs/DAVSYNC-TESTING.md)第 11 节 |
 | **`firefox.xpi`** | Firefox 115+（桌面） | [web-ext run](https://extensionworkshop.com/documentation/develop/getting-started-with-web-ext/) 临时加载（会话级）；运行时同步待验证 |
 
+> 命名说明：`firefox.xpi` 是 Firefox/gecko 专用构建；Chromium 系**没有** xpi——它们的拖拽安装只认 `.crx`。
+
 > 各浏览器对 MV2/自签 crx 的支持差异与绕过方法，见 `docs/DAVSYNC-TESTING.md` 第 11 节（如 Turbo 需 `--load-extension`，其 crx 安装被策略拒绝且 policy 服务被剥离）。
 
 ### 配置同步
