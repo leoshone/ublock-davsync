@@ -299,7 +299,8 @@ extensions.settings.<ext-id>.state = 1
 
 **裸 zip/.xpi 拖到扩展页不触发安装**——Chromium 拖拽安装只认 CRX3 格式（`Cr24` magic + protobuf header + zip payload）。
 
-打包（有私钥 pem 即可，工具链在 `_tmp/node_modules/crx3`）：
+打包（有私钥 pem 即可）：**`node tools/make-packages.cjs`**（一键出 .crx + .zip，
+详见 `tools/make-packages.md`）。工具链：
 ```js
 const writeCRX3 = require('<path>/node_modules/crx3/lib/writeCRX3File.js');
 writeCRX3(recursiveFileList, {
