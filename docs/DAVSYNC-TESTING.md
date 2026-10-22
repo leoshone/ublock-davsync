@@ -133,3 +133,54 @@ davsync 的验证需求链——填 WebDAV 配置 → 触发同步 → 断言云
 ## Changelog
 
 - **2026-10-22**：首版。完成 Chrome 155 / MuMu（Quetta、Chromium 110）/ 坚果云 WebDAV 兼容性验证；沉淀 Chrome 137+ 侧载自动化方法；追加 browser-skill 评估（第 6 节）。
+
+## 7. Kiwi Browser（x86 官方构建）实测 —— 2026-10-22 追加
+
+**结果：扩展加载成功 ✅，davsync 模块运行 ✅，同步被坚果云服务端证书问题阻断 ⚠️**
+
+### 7.1 安装与扩展加载（全通）
+
+- **重大修正**：Kiwi 官方（kiwibrowser/src.next release 14310011181）**有 x86 构建**——此前「仅 ARM 包」的结论有误。x86 包在模拟器上原生执行，**不走 houdini 翻译，Quetta 遇到的 SIGSYS 全灭问题不存在**（渲染进程持续存活，signal 31 = 0）。
+- 安装要点：
+  - 下载时校验字节数（本次首次下载 87% 截断，`pm install` 报 INSTALL_PARSE_FAILED_NOT_APK，断点续传 `-C -` 补全后 Success）；
+  - adb push 假成功问题：需 `MSYS_NO_PATHCONV=1` 前缀，否则 push 报成功但文件不存在；
+  - 首启 GMS 缺失警告（本模拟器无 Google Play 服务）非阻塞，确定后正常走 FirstRun。
+- **扩展加载 UI 完整**：`chrome://extensions`（Kiwi 内部映射为 kiwi://）页面有「开发者模式」开关（默认已开）+ **「+ (from .zip/.crx/.user.js)」按钮**——Kiwi 原生支持直接加载 zip 包，无需解压！
+- zip 加载流程：push zip 到 /sdcard/Download → **必须触发媒体扫描**（`am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://...`），否则 SAF 文件选择器看不到 → 扩展页点 zip 按钮 → 搜索框输入文件名 → 选中。
+- 加载成功后扩展 ID 变为 `klajchagakfaddhaholjhnbdjmdilbdo`（zip 内 manifest 无 key 时自动生成），后台页 `background.html` 正常注册为 devtools target，`vAPI.cloud.getOptions()` 返回的 `davEnabled` 字段证明 **dav-cloud.js 路由与 davsync.js 均已运行**。
+
+### 7.2 CDP Extensions.loadUnpacked 试验结论（不适用于 Android）
+
+- 该命令仅存在于**桌面 Chrome 的 `--remote-debugging-pipe`** 通道，Android 的 devtools socket（`chrome_devtools_remote_*`）不支持此方法。
+- Android 上 Kiwi 的 zip 加载按钮 + SAF 文件选择器反而是完全可自动化路径（uiautomator dump 定位 + input tap/text + 媒体扫描），比桌面 Chrome 155 的对话框自动化**简单得多**。
+- 方法沉淀：Android 侧载 = adb push zip → 媒体扫描广播 → Kiwi 扩展页 zip 按钮 → SAF 搜索选择，全程 adb 可完成。
+
+### 7.3 坚果云 Android 端证书问题（同步阻断根因，服务端缺陷）
+
+Kiwi 内 davsync 触发同步后报 `network: TypeError: Failed to fetch`。CDP Network 域抓包定位：
+
+```
+Network.requestWillBeSent  https://dav.jianguoyun.com/dav/
+Network.loadingFailed      net::ERR_CERT_AUTHORITY_INVALID
+```
+
+排查结论（非本 fork 代码问题）：
+
+1. 坚果云 dav.jianguoyun.com 的证书 issuer 为 `VeriSign Class 1 Extended Validation CA`——该中间 CA 已从现行信任链退役；
+2. **服务器只发 leaf 证书、缺中间链**（`s_client -showcerts` 仅 1 个证书）；Windows/桌面 Chrome 会通过 AIA fetching 自动补链所以正常（curl 实测 207），**Android Chromium 禁用 AIA fetching** → 补链失败 → 拒绝；
+3. 对照：同 Kiwi 内 `https://example.com` fetch 200 正常；坚果云主站 www.jianguoyun.com 同样证书链同样被拒——**坚果云全家对 Android Chromium 都是坏的**；
+4. DNS 无关：MuMu DNS 与系统 DNS 解析到同集群不同节点（.52/.53/.98），各节点证书相同，都缺链。
+
+**影响**：任何 Android Chromium 系浏览器 + 坚果云 WebDAV 的组合都无法工作（Kiwi/Quetta/Lemur 全部）。
+
+**可行方向**：
+- 换 Android 兼容的 WebDAV 服务商（InfiniCLOUD/TeraCLOUD、Nextcloud 自建等，待验证）；
+- 或坚果云侧修复证书链（可反馈客服，附 `openssl s_client -showcerts` 输出）；
+- fork 侧不做「忽略证书校验」选项（安全红线）。
+
+### 7.4 环境注意事项（MuMu 多屏再次坑）
+
+- Kiwi 每次冷启动落在**新的虚拟 displayId**（11→每次变化），桌面 launcher 在 display 0，主屏截图看不到 Kiwi 窗口；
+- 截屏需 `screencap -d <uid>`，uid 从 `dumpsys display` 全量枚举后逐个试（只拉 >100KB 的有内容屏）；
+- **扩展后台服务不受前台/虚拟屏影响**——davsync 的 alarm 与 storage 在后台正常执行，UI 只是观察窗口。
+
