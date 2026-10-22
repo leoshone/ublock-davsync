@@ -162,6 +162,76 @@ img.save(out_path)
 | 弹「无法加载清单」/「key missing」 | manifest JSON 损坏或缺 `key` 字段 → 校验 JSON、注入 RSA key |
 | 鼠标点击全部无效 | RDP 后台会话 → 切前台会话重试 |
 
+---
+
+## Android 路线：Kiwi Browser（模拟器/真机，实测可行 ✅）
+
+**Kiwi 是 Android 上唯一可用的完整扩展载体**（chrome://extensions 完整、开发者模式默认开、原生支持直接加载 zip）。 MuMu 等 x86 模拟器**必须用 Kiwi 的 x86 构建**（github kiwibrowser/src.next releases，文件名含 `-x86-`）——arm64 包走 houdini 翻译，渲染进程会被 SIGSYS 全灭（Quetta/Kiwi-arm64 均如此），x86 原生执行无此问题。
+
+### A. 安装 Kiwi（adb 全程）
+
+```bash
+# 1. 下载后校验字节数（GitHub 下载易截断；截断时 pm install 报 INSTALL_PARSE_FAILED_NOT_APK）
+curl -sIL <apk-url> | grep -i content-length   # 先拿真实大小
+curl -sL -C - -o kiwi-x86.apk <apk-url>         # -C - 断点续传补全
+
+# 2. push 必须 MSYS_NO_PATHCONV=1（Git Bash 下否则报成功但文件不存在）
+MSYS_NO_PATHCONV=1 adb -s 127.0.0.1:16384 push kiwi-x86.apk /data/local/tmp/kiwi.apk
+adb -s 127.0.0.1:16384 shell "pm install -r /data/local/tmp/kiwi.apk"
+```
+
+首启 GMS 缺失警告（模拟器无 Google 服务）非阻塞——点确定后正常走 FirstRun 引导。
+
+### B. 加载扩展 zip（adb 全自动化，比桌面对话框简单得多）
+
+```bash
+A="adb"; DEV=127.0.0.1:16384
+
+# 1. 推 zip
+MSYS_NO_PATHCONV=1 $A -s $DEV push uBlock0-davsync.zip /sdcard/Download/
+
+# 2. 关键：触发媒体扫描，否则 SAF 文件选择器看不到 adb push 的文件
+$A -s $DEV shell "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/uBlock0-davsync.zip"
+
+# 3. 打开 Kiwi 扩展页（菜单 → 扩展程序；直接输 kiwi://extensions 会被重定向，不稳定）
+#    uiautomator dump 定位「+ (from .zip/.crx/.user.js)」按钮 → input tap
+
+# 4. SAF 文件选择器：点搜索图标 → input text '文件名' → 点结果条目
+#    （adb push 的文件只在搜索中出现，"最近"列表按 MIME 过滤会漏 zip）
+
+# 5. 验证：ps -A | grep -cE 'kiwibrowser.*sandboxed'   # 渲染进程 >0 = 存活
+#    cat /proc/net/unix | grep devtools                # 拿 socket 后 forward curl /json
+#    找 "chrome-extension://<id>/background.html" target = 扩展在运行
+```
+
+### C. Android 侧验证与配置（CDP）
+
+```bash
+# Kiwi 的 socket 是带 pid 后缀的（chrome_devtools_remote_<pid>）；不带后缀的可能属于其他浏览器。
+# 逐个 forward 试 /json/version 的 Android-Package 字段区分。
+adb -s $DEV forward tcp:9444 localabstract:chrome_devtools_remote_<pid>
+curl http://127.0.0.1:9444/json   # 列 targets；扩展后台页类型是 "other"
+```
+
+- 后台页 target 可直接 `Runtime.evaluate`：`vAPI.cloud.getOptions()` 返回含 `davEnabled` 字段 = davsync 模块已运行；
+- 配置注入：`chrome.storage.local.set({ davSyncConfig: {...} })`（回调式 API），**改配置后需重启浏览器**（davsync 只在启动时读一次 config，无 storage.onChanged 监听）；
+- 网络抓包：CDP `Network.enable` + `Runtime.evaluate(fetch...)`，`Network.loadingFailed` 的 `errorText`（如 `net::ERR_CERT_AUTHORITY_INVALID`）就是真实失败原因；
+- ⚠️ MuMu 多屏：Kiwi 每次冷启动换新虚拟 displayId，主屏截图看不到它。`screencap -d <uid>` 的 uid 从 `dumpsys display` 全量枚举逐个试（只拉 >100KB 的有内容屏）。**不影响后台扩展运行**。
+
+### D. Android 特有陷阱速查
+
+| 现象 | 原因 / 处置 |
+|---|---|
+| SAF 选择器里找不到 push 的 zip | 未触发媒体扫描 → `am broadcast MEDIA_SCANNER_SCAN_FILE` |
+| push "成功"但模拟器里没文件 | Git Bash 路径转换 → `MSYS_NO_PATHCONV=1` 前缀 |
+| `pm install` 报 NOT_APK / parse fail | APK 下载截断 → 对比 Content-Length，`curl -C -` 补全 |
+| 渲染进程全灭、页面全白 | 用了 arm64 包 → 换 **-x86-** 构建 |
+| devtools socket 连到别的浏览器 | 带 pid 后缀的才是新实例；用 `/json/version` 的 `Android-Package` 确认 |
+| `kiwi://extensions` 被重定向到 google | 走菜单（右上三点 → 扩展程序）最稳 |
+| `chrome-extension://` URL intent 被屏蔽 | ERR_BLOCKED_BY_CLIENT 是 Kiwi 策略；用扩展详情页「检查视图 background.html」链接进入 |
+
+---
+
 ## 本项目上下文备注
 
 - 被测扩展：本仓库构建产物 `dist/build/uBlock0.davsync-*.zip` 解包目录（uBlock0.chromium/）。
