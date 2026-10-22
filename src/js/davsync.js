@@ -44,8 +44,85 @@ import { onBroadcast } from './broadcast.js';
 const DAV_FILE_PATH_DEFAULT = 'ublock-davsync/ublock-backup.json';
 
 const SYNC_ALARM_NAME = 'davSyncAlarm';
-const SYNC_PERIOD_MIN = 30;          // periodic sync every 30 minutes
+const SYNC_PERIOD_MIN = 30;          // default periodic sync interval (minutes)
+const SYNC_PERIOD_MIN_MIN = 5;       // user-configurable bounds
+const SYNC_PERIOD_MIN_MAX = 720;
 const SYNC_INITIAL_DELAY_MIN = 2;    // first sync 2 min after launch
+const STARTUP_SYNC_DELAY_MS = 18000; // startup sync ~18 s after launch
+
+/******************************************************************************/
+// Toolbar badge: error indicator for the DAV-Sync subsystem. uBO itself does
+// not use the badge (verified: no setBadge* anywhere in vAPI/background), so
+// it is safe to own here. Colors: red '!' = hard error (needs attention),
+// grey '↻' = transient (auto-recovers next round), cleared on success.
+
+const badgeSet = function(kind) {
+    if ( typeof chrome === 'undefined' || !chrome.browserAction ) { return; }
+    try {
+        if ( kind === 'error' ) {
+            chrome.browserAction.setBadgeBackgroundColor({ color: '#D93025' });
+            chrome.browserAction.setBadgeText({ text: '!' });
+        } else if ( kind === 'transient' ) {
+            chrome.browserAction.setBadgeBackgroundColor({ color: '#9AA0A6' });
+            chrome.browserAction.setBadgeText({ text: '↻' });
+        } else {
+            chrome.browserAction.setBadgeText({ text: '' });
+        }
+    } catch {
+        // Badge API unavailable on some forks -- purely cosmetic, ignore.
+    }
+};
+
+// Classify a lastError string into badge severity. Returns
+// 'error' | 'transient' | '' (no badge).
+const errorSeverity = function(err) {
+    if ( typeof err !== 'string' || err === '' ) { return ''; }
+    if ( err.startsWith('network:') ) { return 'transient'; }  // offline etc.
+    if ( err.startsWith('HTTP 5') ) { return 'transient'; }    // server busy
+    if ( err === 'locked-by-other-device' ) { return 'transient'; }
+    if ( err === 'both-changed' ) { return 'error'; }          // needs decision
+    return 'error';                                            // everything else
+};
+
+const updateBadge = function() {
+    // conflict state takes precedence over plain errors
+    if ( syncState.conflict === true ) {
+        badgeSet('error');
+        return;
+    }
+    badgeSet(errorSeverity(syncState.lastError));
+};
+
+// Friendly Chinese messages for the settings pane, derived from lastError /
+// conflict state. Kept in one place so the pane and badge stay in sync.
+const humanizeError = function(err) {
+    if ( typeof err !== 'string' || err === '' ) { return ''; }
+    if ( err.startsWith('network:') ) {
+        return '无法连接服务器，请检查网络或服务器 URL';
+    }
+    if ( err.startsWith('HTTP 5') ) {
+        return `服务器繁忙（${err}），稍后将自动重试`;
+    }
+    if ( err.startsWith('HTTP 4') ) {
+        return `服务器拒绝了请求（${err}），请检查账号与密码`;
+    }
+    if ( err.startsWith('redirect') ) {
+        return '服务器返回了重定向，请确认 URL 指向 WebDAV 根目录';
+    }
+    if ( err === 'locked-by-other-device' ) {
+        return '另一台设备正在同步，本轮已跳过（稍后自动重试）';
+    }
+    if ( err === 'remote-parse-failed' ) {
+        return '云端数据格式异常，请检查该 WebDAV 文件是否被其他程序修改';
+    }
+    if ( err === 'upload size mismatch' || err.includes('upload size mismatch') ) {
+        return '上传后校验不一致，已重试仍失败，请稍后重试';
+    }
+    if ( err === 'remote-vanished' ) {
+        return '云端文件在同步过程中消失，下一轮将重新上传';
+    }
+    return err;   // unknown: show as-is
+};
 
 /******************************************************************************/
 // WebDAV client (fetch-based; Basic Auth only -- Jianguoyun/Nutstore,
@@ -223,6 +300,7 @@ const configDefault = {
     password: '',
     filePath: DAV_FILE_PATH_DEFAULT,
     deviceName: '',          // reported in remote metadata for diagnostics
+    syncIntervalMinutes: SYNC_PERIOD_MIN,  // user-configurable, clamped on use
 };
 
 let config = Object.assign({}, configDefault);
@@ -295,6 +373,10 @@ let syncState = {
     lastSyncTime: 0,
     lastError: '',
     lastDirection: '',       // 'push' | 'pull' | 'none'
+    conflict: false,         // both ends changed: auto-sync paused until user
+                             // picks 上传/下载 in the settings pane
+    conflictRemoteMeta: null,// {deviceName, timeStamp} of the conflicting
+                             // remote snapshot, shown in the pane
 };
 
 const stateReady = (async ( ) => {
@@ -317,6 +399,15 @@ const runSyncOnce = async function( ) {
     if ( config.url === '' ) { return 'no-url'; }
 
     await Promise.all([ configReady, stateReady ]);
+
+    // 0a. An unresolved conflict blocks automatic sync: the user must pick
+    // 上传/下载 in the settings pane (davSyncForceUpload/davSyncForceDownload).
+    // Auto-resuming here would silently discard one side's changes -- the
+    // exact failure mode this state was introduced to prevent.
+    if ( syncState.conflict === true ) {
+        updateBadge();
+        return 'conflict';
+    }
 
     // 0. Mutual exclusion: another device may be mid-sync. One retry after
     // a short wait covers the common "both devices hit the periodic alarm"
@@ -391,6 +482,7 @@ const runSyncOnceLocked = async function( ) {
         syncState.lastSyncTime = Date.now();
         syncState.lastError = '';
         saveSyncState();
+        updateBadge();
         return 'in-sync';
     }
 
@@ -408,32 +500,59 @@ const runSyncOnceLocked = async function( ) {
             syncState.lastSyncTime = Date.now();
             syncState.lastDirection = 'push';
             syncState.lastError = '';
+            syncState.conflict = false;
+            syncState.conflictRemoteMeta = null;
             saveSyncState();
+            updateBadge();
             return 'pushed';
         }
         if ( put.status !== 412 ) {
             syncState.lastError = put.error;
             saveSyncState();
+            updateBadge();
             return put.error;
         }
-        // 412 Precondition Failed: remote moved on; re-read and apply remote
+        // 412 Precondition Failed: remote moved on while our local copy is
+        // also dirty => BOTH sides changed. Do not auto-resolve: park in
+        // conflict state (badge '!') and let the user pick 上传/下载.
+        // Before parking, archive the remote version next to the data file
+        // so the losing side is always recoverable.
         remote = await davGet(config);
         if ( remote.ok === false || remote.notFound === true ) {
             syncState.lastError = remote.ok ? 'remote-vanished' : remote.error;
             saveSyncState();
+            updateBadge();
             return syncState.lastError;
         }
+        let remoteSnapshot;
         try {
-            remoteData = JSON.parse(remote.text);
+            remoteSnapshot = JSON.parse(remote.text);
         } catch {
             syncState.lastError = 'remote-parse-failed';
             saveSyncState();
+            updateBadge();
             return syncState.lastError;
         }
+        const dir = config.filePath.split('/').slice(0, -1).join('/');
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        await davRequest(config, 'PUT',
+            `${dir}/ublock-backup.conflict-${ts}.json`,
+            { body: remote.text });
+        syncState.conflict = true;
+        syncState.conflictRemoteMeta = {
+            deviceName: remoteSnapshot.deviceName || '',
+            timeStamp: remoteSnapshot.timeStamp || 0,
+        };
+        syncState.lastError = 'both-changed';
+        syncState.lastSyncTime = Date.now();
+        saveSyncState();
+        updateBadge();
+        return 'both-changed';
     }
 
-    // 6. Remote has changes we do not have -> apply remote (pull wins)
-    if ( remoteSameAsLocal === false ) {
+    // 6. Remote has changes we do not have -> apply remote (pull wins).
+    //    (Safe: local was NOT dirty, so nothing of ours is lost.)
+    if ( remoteSameAsLocal === false && localDirty === false ) {
         await applyRemoteData(remoteData);
         const localNow = await collectLocalData();
         syncState.lastEtag = remote.etag || '';
@@ -441,7 +560,10 @@ const runSyncOnceLocked = async function( ) {
         syncState.lastSyncTime = Date.now();
         syncState.lastDirection = 'pull';
         syncState.lastError = '';
+        syncState.conflict = false;
+        syncState.conflictRemoteMeta = null;
         saveSyncState();
+        updateBadge();
         return 'pulled';
     }
 
@@ -450,7 +572,10 @@ const runSyncOnceLocked = async function( ) {
     syncState.lastLocalFingerprint = localFp;
     syncState.lastSyncTime = Date.now();
     syncState.lastError = '';
+    syncState.conflict = false;
+    syncState.conflictRemoteMeta = null;
     saveSyncState();
+    updateBadge();
     return 'in-sync';
 };
 
@@ -546,11 +671,13 @@ const schedulePeriodicSync = function( ) {
     // Unconditional create: alarms persist across browser restarts in the
     // profile, so createIfNotPresent would keep the stale schedule forever
     // and the "first sync 2 min after launch" promise would never hold.
-    // Recreating on every launch resets the initial delay while keeping the
-    // same 30-minute period. Same (name, ...args) shape the vAPI wrapper uses.
+    // Recreating on every launch (and on every setConfig) resets the initial
+    // delay and picks up a user-changed interval.
+    const period = Math.max(SYNC_PERIOD_MIN_MIN,
+        Math.min(SYNC_PERIOD_MIN_MAX, Number(config.syncIntervalMinutes) || SYNC_PERIOD_MIN));
     vAPI.alarms.create(SYNC_ALARM_NAME, {
         delayInMinutes: SYNC_INITIAL_DELAY_MIN,
-        periodInMinutes: SYNC_PERIOD_MIN,
+        periodInMinutes: period,
     });
 };
 
@@ -602,15 +729,22 @@ const davDelete = async function(filePath) {
 const davSync = {
     async getStatus() {
         await Promise.all([ configReady, stateReady ]);
+        const err = syncState.conflict === true ? 'both-changed' : syncState.lastError;
         return {
             enabled: config.enabled,
             url: config.url,
             username: config.username,
             filePath: config.filePath,
             deviceName: config.deviceName,
+            syncIntervalMinutes: config.syncIntervalMinutes,
             lastSyncTime: syncState.lastSyncTime,
-            lastError: syncState.lastError,
+            lastError: err,
+            lastErrorHuman: humanizeError(err),
+            errorSeverity: syncState.conflict === true
+                ? 'error' : errorSeverity(syncState.lastError),
             lastDirection: syncState.lastDirection,
+            conflict: syncState.conflict === true,
+            conflictRemoteMeta: syncState.conflictRemoteMeta,
         };
     },
 
@@ -627,11 +761,77 @@ const davSync = {
         if ( typeof details.enabled === 'boolean' ) {
             config.enabled = details.enabled;
         }
+        if ( typeof details.syncIntervalMinutes === 'number' ) {
+            config.syncIntervalMinutes = Math.max(SYNC_PERIOD_MIN_MIN,
+                Math.min(SYNC_PERIOD_MIN_MAX, Math.round(details.syncIntervalMinutes)));
+        }
         await saveConfig();
-        schedulePeriodicSync();
+        schedulePeriodicSync();   // picks up a changed interval (unconditional create)
         if ( config.enabled ) {
             // Immediate first sync so the user sees feedback right away.
             setTimeout(( ) => { runSyncOnce(); }, 500);
+        }
+        return this.getStatus();
+    },
+
+    // Conflict resolution, called from the settings pane. Direction 'push'
+    // keeps local and overwrites remote; 'pull' applies remote and restarts.
+    // Both clear the conflict state first so the forced run is not blocked.
+    async resolveConflict(direction) {
+        await Promise.all([ configReady, stateReady ]);
+        if ( syncState.conflict !== true ) {
+            return this.getStatus();
+        }
+        syncState.conflict = false;
+        syncState.conflictRemoteMeta = null;
+        saveSyncState();
+
+        if ( direction === 'pull' ) {
+            const remote = await davGet(config);
+            if ( remote.ok === false || remote.notFound === true ) {
+                syncState.lastError = remote.ok ? 'remote-vanished' : remote.error;
+                saveSyncState();
+                updateBadge();
+                return this.getStatus();
+            }
+            let remoteData;
+            try {
+                remoteData = JSON.parse(remote.text);
+            } catch {
+                syncState.lastError = 'remote-parse-failed';
+                saveSyncState();
+                updateBadge();
+                return this.getStatus();
+            }
+            await applyRemoteData(remoteData);
+            const localNow = await collectLocalData();
+            syncState.lastEtag = remote.etag || '';
+            syncState.lastLocalFingerprint = fingerprintLocalData(localNow);
+            syncState.lastSyncTime = Date.now();
+            syncState.lastDirection = 'pull';
+            syncState.lastError = '';
+            saveSyncState();
+            updateBadge();
+            vAPI.app.restart();
+            return this.getStatus();
+        }
+
+        // direction === 'push'（默认）：本地覆盖云端。If-Match 用冲突时记录的
+        // ETag 已不可靠，直接无条件 PUT（本次是用户明确决策）。
+        const local = await collectLocalData();
+        const put = await davPutVerified(config, JSON.stringify(local, null, 1));
+        if ( put.ok === true ) {
+            syncState.lastEtag = put.etag || '';
+            syncState.lastLocalFingerprint = fingerprintLocalData(local);
+            syncState.lastSyncTime = Date.now();
+            syncState.lastDirection = 'push';
+            syncState.lastError = '';
+            saveSyncState();
+            updateBadge();
+        } else {
+            syncState.lastError = put.error;
+            saveSyncState();
+            updateBadge();
         }
         return this.getStatus();
     },

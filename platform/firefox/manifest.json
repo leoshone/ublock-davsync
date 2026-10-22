@@ -19,7 +19,9 @@
       "id": "uBlock0@raymondhill.net",
       "strict_min_version": "115.0",
       "data_collection_permissions": {
-        "required": [ "none" ]
+        "required": [
+          "none"
+        ]
       }
     },
     "gecko_android": {
@@ -27,8 +29,7 @@
     }
   },
   "commands": {
-    "_execute_browser_action": {
-    },
+    "_execute_browser_action": {},
     "launch-element-zapper": {
       "description": "__MSG_popupTipZapper__"
     },
@@ -106,7 +107,7 @@
     "128": "img/ublock.svg"
   },
   "manifest_version": 2,
-  "name": "uBlock Origin",
+  "name": "uBlock Origin DavSync",
   "options_ui": {
     "page": "dashboard.html",
     "open_in_tab": true

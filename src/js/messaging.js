@@ -1550,6 +1550,9 @@ const onMessage = function(request, sender, callback) {
     case 'davSyncNow':
         return davSync.syncNow().then(callback);
 
+    case 'davSyncResolveConflict':
+        return davSync.resolveConflict(request.direction).then(callback);
+
     default:
         return vAPI.messaging.UNHANDLED;
     }

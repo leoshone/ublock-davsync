@@ -22,12 +22,10 @@ with open(manifest_out_file) as f:
 
 manifest_out['version'] = version
 
-# Development build? If so, modify name accordingly.
-match = re.search(r'^\d+\.\d+\.\d+\.\d+$', version)
-if match:
-    manifest_out['name'] += ' development build'
-    manifest_out['short_name'] += ' dev build'
-    manifest_out['browser_action']['default_title'] += ' dev build'
+# DavSync fork: keep the platform name as-is ("uBlock Origin DavSync").
+# The upstream "development build" suffix is intentionally NOT appended --
+# this is a distributed fork, not a dev build, and the distinct name keeps
+# it visually separate from the official uBlock Origin in the toolbar.
 
 with open(manifest_out_file, 'w') as f:
     json.dump(manifest_out, f, indent=2, separators=(',', ': '), sort_keys=True)

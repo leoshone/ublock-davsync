@@ -328,7 +328,10 @@ dom.on(
 
 const davStatusText = status => {
     if ( status.enabled !== true ) { return '未启用'; }
-    if ( status.lastError ) { return `错误：${status.lastError}`; }
+    if ( status.conflict === true ) { return '冲突：自动同步已暂停，请选择「上传」或「下载」'; }
+    if ( status.lastError ) {
+        return `错误：${status.lastErrorHuman || status.lastError}`;
+    }
     if ( status.lastSyncTime === 0 ) { return '尚未同步'; }
     const t = new Date(status.lastSyncTime).toLocaleString();
     const dir = {
@@ -344,6 +347,21 @@ const refreshDavStatus = function(status) {
     if ( status.url ) { qs$('#davSyncUrl').value = status.url; }
     if ( status.username ) { qs$('#davSyncUsername').value = status.username; }
     if ( status.deviceName ) { qs$('#davSyncDeviceName').value = status.deviceName; }
+    if ( typeof status.syncIntervalMinutes === 'number' ) {
+        qs$('#davSyncInterval').value = status.syncIntervalMinutes;
+    }
+    // Conflict banner: show row + details, or hide it when resolved.
+    const row = qs$('#davSyncConflictRow');
+    if ( status.conflict === true ) {
+        row.style.display = '';
+        const meta = status.conflictRemoteMeta || {};
+        const when = meta.timeStamp
+            ? new Date(meta.timeStamp).toLocaleString() : '未知时间';
+        dom.text('#davSyncConflictMeta',
+            `云端版本来自「${meta.deviceName || '未知设备'}」· 更新于 ${when}`);
+    } else {
+        row.style.display = 'none';
+    }
     dom.text('#davSyncStatus', davStatusText(status));
 };
 
@@ -352,6 +370,7 @@ vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
 });
 
 dom.on('#davSyncSave', 'click', ( ) => {
+    const interval = parseFloat(qs$('#davSyncInterval').value);
     const status = vAPI.messaging.send('dashboard', {
         what: 'davSyncSetConfig',
         enabled: qs$('#davSyncEnabled').checked,
@@ -359,6 +378,7 @@ dom.on('#davSyncSave', 'click', ( ) => {
         username: qs$('#davSyncUsername').value,
         password: qs$('#davSyncPassword').value,
         deviceName: qs$('#davSyncDeviceName').value,
+        syncIntervalMinutes: isNaN(interval) ? undefined : interval,
     }).then(result => {
         if ( result instanceof Object ) {
             refreshDavStatus(result);
@@ -370,6 +390,25 @@ dom.on('#davSyncSave', 'click', ( ) => {
 dom.on('#davSyncNow', 'click', ( ) => {
     dom.text('#davSyncStatus', '同步中…');
     vAPI.messaging.send('dashboard', { what: 'davSyncNow' }).then(result => {
+        if ( result instanceof Object ) { refreshDavStatus(result); }
+    });
+});
+
+// Conflict resolution: 上传 keeps local, 下载 applies remote (then restarts).
+dom.on('#davSyncForceUpload', 'click', ( ) => {
+    dom.text('#davSyncStatus', '正在用本地覆盖云端…');
+    vAPI.messaging.send('dashboard', {
+        what: 'davSyncResolveConflict', direction: 'push',
+    }).then(result => {
+        if ( result instanceof Object ) { refreshDavStatus(result); }
+    });
+});
+
+dom.on('#davSyncForceDownload', 'click', ( ) => {
+    dom.text('#davSyncStatus', '正在应用云端版本…');
+    vAPI.messaging.send('dashboard', {
+        what: 'davSyncResolveConflict', direction: 'pull',
+    }).then(result => {
         if ( result instanceof Object ) { refreshDavStatus(result); }
     });
 });
