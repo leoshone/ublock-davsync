@@ -339,3 +339,18 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 
 **推荐分发方式**：百分用 crx 拖拽/命令行；Turbo 继续用 --load-extension 脚本方案。
 
+### 11.5 企业策略白名单方案（ExtensionInstallAllowlist）—— Turbo 上不可行（已实测）
+
+尝试按 Chrome 企业策略方案放行自签 crx：在 HKLM/HKCU 的
+`Policies\Google\Chrome`、`Policies\Chromium`、`Policies\Turbo`、`Policies\TurboX`
+四个路径下均写入 `ExtensionInstallAllowlist`（含具体扩展 ID 与 `*` 通配两种值），
+重启 Turbo 后 crx 安装仍报 `CRX_REQUIRED_PROOF_MISSING`。
+
+用 `chrome://policy` 验证发现：**页面存在但内容为空**（readyState=complete、innerText 空）
+——**Turbo 构建时剥离了 policy 服务**，任何注册表策略都不会被读取（国产壳为防策略劫持的常见做法）。
+
+结论：
+- **百分 150**：策略/开发者模式路径均可装自签 crx ✅
+- **Turbo 154**：policy 服务被剥离，自签 crx 离线安装无绕过手段 ❌，只能 --load-extension（会话级）
+- 已在 Turbo 官方 issue #724 补充该测试结果，请官方提供豁免开关或修复
+

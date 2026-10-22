@@ -313,6 +313,10 @@ writeCRX3(recursiveFileList, {
 - CRX3 头结构：`Cr24` + u32 version(3) + u32 headerLen + protobuf{ field2: AsymmetricKeyProof{pubkey(1), sig(2)}, field10000: SignedData{crx_id(1)} }；sig = RSA-SHA256(SignedData 原始字节)；
 - **安装前提：目标 profile 的「开发者模式」必须开启**，否则报 `CRX_SIGNATURE_VERIFICATION_FAILED`（未上架商店的自签 crx 被 InstallVerifier 拒）。
 
+**⚠️ 企业策略白名单（ExtensionInstallAllowlist）对 Turbo 无效**：Turbo 构建剥离了
+policy 服务（chrome://policy 页面为空），注册表策略一律不读。百分未验证策略路径，
+但开发者模式开启即足够。
+
 **程序化安装路径**（拖拽本身是浏览器 UI 行为，无法 CDP 模拟）：
 把 crx 路径作为命令行参数传给浏览器 → 打开扩展页并弹标准确认框 → 点击「添加扩展程序」完成。
 crx 正规安装后状态**持久 ENABLED**（区别于 --load-extension 的会话级 DISABLED），且 Preferences 有持久条目。
