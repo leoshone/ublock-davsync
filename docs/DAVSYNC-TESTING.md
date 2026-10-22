@@ -396,3 +396,13 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 | Android 模拟器 | Quetta arm64 | chromium | ❌ SIGSYS + 注入失效 | ❌ |
 | Windows | Chrome 155 | chromium | ❌ MV2 移除 | — |
 
+### 12.4 冒烟脚本补充发现（dav-e2e.py 实测）
+
+- **lock 文件机制实战验证**：多端（Turbo/百分）启动时间接近时，后启动端会报
+  `lastError='locked-by-other-device'`——lock 正确阻止了并发同步，下一轮自动成功。
+  这是Floccus 式锁在真实双端环境的首个实战证据。
+- crx **正规安装**（非 --load-extension）的扩展重启后保持 ENABLED 且启动同步自动执行
+  ——百分上 crx 分发 + 持久运行 + 自动同步的完整链路成立。
+- alarm 手动触发（chrome.alarms.create 0.2min）在百分与 Turbo 上均不触发回调；
+  可靠触发方式 = 重启浏览器走启动同步。
+
