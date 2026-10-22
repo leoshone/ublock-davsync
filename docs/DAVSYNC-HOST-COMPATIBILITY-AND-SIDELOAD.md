@@ -55,6 +55,10 @@ Quetta 2.0.8（arm64-v8a，Chromium 148）是少数原生支持扩展的 Android
 
 **结论**：x86_64 模拟器 + ARM 翻译环境跑不了任何带扩展的 Android Chromium 浏览器。Android 端验证需 ARM 真机。
 
+### 设计决策：不做 Google Drive 后端
+
+原始需求曾包含 Google Drive，设计阶段即排除、**代码中从未实现**：Google Drive API 的 OAuth 客户端若未经 Chrome Web Store 上架验证，配额与审核都过不去；而本 fork 为 MV2 构建，根本无法上架 Play/Web Store（Chrome 137+ 已禁 MV2）。故同步后端只支持标准 WebDAV（坚果云已验证）。若未来 MV3 移植后再评估 GDrive。
+
 ## 3. 坚果云 WebDAV —— 同步后端验证通过 ✅
 
 ```
