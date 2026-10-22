@@ -1,36 +1,47 @@
 # ARTIFACTS 产物清单
 
-> 本文件是工作区产物索引。**已同步到 GitHub**：源码与文档在 `master` 分支，构建包/密钥/工具在 `artifacts` 分支。
+> 本文件是工作区产物索引。**已同步到 GitHub**：源码与文档在 `master` 分支，构建包/密钥/工具在 `artifacts` 分支，发行包在 [Releases](https://github.com/leoshone/ublock-davsync/releases/tag/v1.75.1.16)。
 > 换电脑恢复：`git clone https://github.com/leoshone/ublock-davsync` 后按「重建命令」一节操作即可。
 > 工作区副本与仓库副本（`ublock-davsync/ARTIFACTS.md`）内容一致，更新时同步改两处。
 
 ## 仓库布局（github.com/leoshone/ublock-davsync，私有）
 
-| 分支 | 内容 |
+| 分支/页 | 内容 |
 |---|---|
-| `master` | 完整 fork 源码（基于 gorhill/uBlock 1.75.1.16，上游 commit `1e6f82b`）+ `docs/` 验证文档 |
-| `artifacts` | 可复用产物：构建 zip、扩展密钥、侧载脚本、WebDAV 冒烟测试、WorkBuddy skill |
+| `master` | 完整 fork 源码（基于 gorhill/uBlock 1.75.1.16）+ `docs/` 验证文档 + `tools/` 打包脚本 |
+| `artifacts` | 可复用产物：crx/zip/xpi 构建包、扩展密钥、侧载脚本、WebDAV 冒烟测试 |
+| `Releases` | v1.75.1.16 正式发行（crx/zip/xpi 三件套 + 说明），日常下载用这个 |
 
-## master 分支关键改动（相对上游 gorhill/uBlock）
+## master 分支关键文件
 
-| 产物 | 路径 | 说明 |
-|---|---|---|
-| fork 提交 | `22efe91` | 全部 fork 改动（git log 可查） |
-| 核心模块 | `src/js/davsync.js` | WebDAV 客户端 + 自动同步调度 + 数据快照/应用（+577 行） |
-| 云路由 | `src/js/dav-cloud.js` | 把 vAPI.cloud 路由到 WebDAV（+145 行） |
-| 设置 UI | `src/settings.html` + `src/js/settings.js` | WebDAV 配置区块（URL/账号/密码/设备名/立即同步） |
-| 消息通道 | `src/js/messaging.js` + `src/js/start.js` | davSyncGetStatus / davSyncSetConfig / davSyncNow + 变更广播 |
-| 验证文档 | `docs/DAVSYNC-HOST-COMPATIBILITY-AND-SIDELOAD.md` | 载体兼容性验证 + Chrome 侧载方法（持续迭代，文末 changelog） |
+| 路径 | 说明 |
+|---|---|
+| `src/js/davsync.js` | WebDAV 客户端 + lock/size 校验 + 启动同步/定时调度 + 快照/应用 |
+| `src/js/dav-cloud.js` | 把 vAPI.cloud 路由到 WebDAV |
+| `src/settings.html` + `src/js/settings.js` | 设置页 DAV-Sync 配置区块（URL/账号/密码/设备名/立即同步） |
+| `src/js/messaging.js` + `src/js/start.js` | davSyncGetStatus / davSyncSetConfig / davSyncNow + 变更广播 |
+| `tools/make-packages.cjs` | 一键打包 .crx + .zip（crx3 npm 工具签名） |
+| `tools/make-packages.md` | 打包说明、各浏览器安装速查、踩坑记录 |
+| `docs/DAVSYNC-TESTING.md` | 全平台载体验证 + 侧载方法 + E2E 记录（1-11 节） |
 
-## artifacts 分支内容
+## artifacts 分支内容（`build/`）
 
-| 产物 | 路径 | 说明 |
-|---|---|---|
-| 构建包 | `build/uBlock0.davsync-1.75.1.16.zip` | MV2 包，解压后可"加载已解压的扩展程序" |
-| 扩展密钥 | `build/ublock-davsync.key` | RSA 私钥（PEM）。**保持不变则扩展 ID 恒定**（`mggocpoejajooeoecednjapaeafnhiie`）。敏感：仓库转公开前须移走 |
-| 侧载脚本 | `scripts/ublock-sideload.py` | Chrome 137+（实测 155）未打包扩展自动化加载（UIA + SendInput + WM_SETTEXT） |
-| 冒烟测试 | `scripts/dav-smoke-test.sh` | 坚果云/通用 WebDAV 连通性五步测试 |
-| WorkBuddy skill | `skill/SKILL.md` | `chrome-unpacked-sideload` 项目级 skill（本工作区 `.workbuddy/skills/` 同源） |
+| 产物 | 说明 |
+|---|---|
+| `uBlock0.davsync-1.75.1.16.crx` | CRX3（crx3 工具签名）。百分等拖拽/命令行安装（需开发者模式开） |
+| `uBlock0.davsync-1.75.1.16.zip` | Kiwi zip 按钮加载 / 手工解压 --load-extension |
+| `uBlock0.davsync-1.75.1.16.xpi` | Firefox 系备用（未实测） |
+| `ublock-davsync.key` | RSA 私钥（PEM）。**保持不变则扩展 ID 恒定 = `odecihgahfphabajblgnmopeibmkhifp`**。敏感：仓库转公开前须移走 |
+
+> ⚠️ 2026-10-22 换过一次 key：旧 ID `mggocpoe...` 已废弃，现 ID `odecihgahfphabajblgnmopeibmkhifp`。
+> manifest.json 已内嵌公钥（`key` 字段），重打包用 `node tools/make-packages.cjs` 即可。
+
+## scripts/
+
+| 脚本 | 说明 |
+|---|---|
+| `dav-smoke-test.sh` | 坚果云/通用 WebDAV 连通性五步测试 |
+| `ublock-sideload.py` | Chrome 137+ 未打包扩展自动化加载（UIA + SendInput + WM_SETTEXT） |
 
 ## 重建命令（换电脑后从源码重构建）
 
@@ -45,10 +56,12 @@ cp platform/chromium/*.html dist/build/uBlock0.chromium/
 cp platform/chromium/*.json dist/build/uBlock0.chromium/
 cp -R dist/build/uBlock0.chromium/_locales/nb dist/build/uBlock0.chromium/_locales/no
 python3 tools/make-chromium-meta.py dist/build/uBlock0.chromium
-```
 
-注意：重新构建后若要保持扩展 ID 不变，需把 `artifacts/build/ublock-davsync.key` 的公钥写进新 manifest 的 `key` 字段（换密钥 = 换 ID = 丢已装扩展的配置）。
+# 打包（需 manifest 带 key 字段；私钥见 artifacts/build/ublock-davsync.key）
+npm install --prefix ../_tmp crx3
+node tools/make-packages.cjs
+```
 
 ## 本地临时目录（未入 GitHub，可随时重建）
 
-`_tmp/davtest/`：测试 profile（win-chrome）、dialog 自动化中间产物、chrome 日志。全部可弃，有价值的内容均已沉淀到上述两分支。
+`_tmp/davtest/`：各浏览器测试 profile（win/turbo/cent-chrome）、crx3 npm 工具链、对话框自动化中间产物。全部可弃，有价值的内容均已沉淀到分支与文档。

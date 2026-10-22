@@ -321,3 +321,5 @@ policy 服务（chrome://policy 页面为空），注册表策略一律不读。
 把 crx 路径作为命令行参数传给浏览器 → 打开扩展页并弹标准确认框 → 点击「添加扩展程序」完成。
 crx 正规安装后状态**持久 ENABLED**（区别于 --load-extension 的会话级 DISABLED），且 Preferences 有持久条目。
 
+**一键打包**：`node tools/make-packages.cjs`（本仓库），同时产出 .crx + .zip，详见 `tools/make-packages.md`。
+

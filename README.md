@@ -23,33 +23,55 @@ uBlock Origin — DAV-Sync Edition
 
 uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在本机，换设备/换浏览器要手动导出导入。**DAV-Sync 让任意多个浏览器实例通过任意标准 WebDAV 服务（坚果云、InfiniCLOUD、Nextcloud 等）自动保持 uBO 设置一致**：
 
-- **自动同步**：设置变更后自动推送到 WebDAV，其他设备定时拉取合并，无需人工干预；
-- **跨浏览器**：基于 uBO 官方云存储通道（`vAPI.cloud`）实现，任何能装 uBO 的浏览器都适用，不绑定单一内核；
-- **快照合并**：带设备名标识与数据快照，多端同时修改可合并而非盲目覆盖；
+- **自动同步**：启动 18 秒后自动同步一次；之后每 30 分钟定时 + 本地变更防抖 1 分钟自动推送，无需人工干预；
+- **多端可靠**：固定扩展 ID（`odecihgahfphabajblgnmopeibmkhifp`）、ETag 条件写入（If-Match 防盲覆盖）、lock 文件防多端并发、PUT 后读回校验防静默截断；
+- **跨浏览器**：基于 uBO 官方云存储通道（`vAPI.cloud`）实现，任何能装 uBO 的浏览器都适用；
 - **零外部依赖**：直接用扩展自身的 `fetch` 访问 WebDAV，无需本地代理或额外服务端。
 
-### 快速开始
+## 下载安装（v1.75.1.16）
 
-1. 从 `artifacts` 分支 `build/`（或自行按 `ARTIFACTS.md` 重建）获取构建包，解压；
-2. 浏览器扩展管理 → 开发者模式 → 加载已解压的扩展程序（**需仍支持 MV2 的浏览器**——Chrome 137+ 已移除 MV2，推荐百分浏览器 / 360 极速 / Firefox）；
-3. uBO 设置页 → 底部「DAV-Sync」区块 → 填 WebDAV 地址、账号、应用密码、设备名 → 保存；
-4. 其余设备装同款 fork，填**同一个 WebDAV 目录**、不同的设备名即可。
+三个发行包在 [Releases](https://github.com/leoshone/ublock-davsync/releases/tag/v1.75.1.16)，按浏览器选择：
+
+| 包 | 适用浏览器 | 安装方式 |
+|---|---|---|
+| **`.crx`** | 百分、360 极速等保留 MV2 的国产 Chromium 壳 | 扩展页开启「开发者模式」→ 拖入 crx → 确认。安装后**持久生效**，重启不丢 |
+| **`.zip`** | Kiwi Browser（Android） | push 到设备 → 扩展页「+ (from .zip/.crx/.user.js)」选择 |
+| 解包目录 | Turbo 等不支持 crx 安装的壳 | `--load-extension=<解包目录>` 启动（会话级），详见[载体测试文档](docs/DAVSYNC-TESTING.md)第 11 节 |
+| ~~`.xpi`~~ | Firefox 系备用（未实测） | 同 zip，改名即可 |
+
+> 各浏览器对 MV2/自签 crx 的支持差异与绕过方法，见 `docs/DAVSYNC-TESTING.md` 第 11 节（如 Turbo 需 `--load-extension`，其 crx 安装被策略拒绝且 policy 服务被剥离）。
+
+### 配置同步
+
+1. 扩展安装后打开 uBO 设置页 → 底部「DAV-Sync」区块
+2. 填 WebDAV 地址（如 `https://dav.jianguoyun.com/dav/`）、账号、**应用密码**（坚果云用授权密码而非登录密码）、设备名
+3. 开启开关 → 立即首推；其余设备填**同一 WebDAV 目录**、**不同设备名**即可自动互相同步
+
+### 平台支持矩阵（2026-10-22 实测）
+
+| 平台 | 载体 | 安装 | 双向同步 E2E |
+|---|---|---|---|
+| Windows | 百分浏览器 150 | ✅ crx 拖拽 | ✅ 通过 |
+| Windows | Turbo 154 | ✅ --load-extension（会话级） | ✅ 通过 |
+| Android (MuMu x86) | Kiwi x86 | ✅ zip 加载 | ⚠️ 安装运行正常；同步被坚果云 Android 证书链问题阻断（[详见](docs/DAVSYNC-TESTING.md)#7.3，换其他 WebDAV 服务商可解） |
+| Windows | Chrome 155+ | ❌ MV2 已移除 | — |
 
 ### 关键文件
 
 | 文件 | 作用 |
 |---|---|
-| `src/js/davsync.js` | WebDAV 客户端、自动同步调度、快照生成/应用 |
+| `src/js/davsync.js` | WebDAV 客户端、自动同步调度、快照生成/应用、lock/size 校验 |
 | `src/js/dav-cloud.js` | 把 uBO 云存储路由接到 WebDAV |
 | `src/js/settings.js` / `src/settings.html` | 设置页 DAV-Sync 配置 UI |
-| `docs/DAVSYNC-TESTING.md` | 载体兼容性验证 + Chrome 侧载方法（持续迭代） |
-| `ARTIFACTS.md` | 产物索引与换机重建指南 |
+| `tools/make-packages.cjs` + `tools/make-packages.md` | 一键打包 crx/zip + 打包说明与踩坑记录 |
+| `docs/DAVSYNC-TESTING.md` | 全平台载体兼容性验证 + 侧载方法 + E2E 记录（持续迭代） |
+| `ARTIFACTS.md` | 仓库分支布局、密钥管理、换机重建指南 |
 
 ### 已知限制
 
-- 基于 uBO **1.75.1.16（Manifest V2）**。Chrome 137+ 已禁用 MV2，需选用保留 MV2 的内核；未来计划向 uBOL（MV3）移植，见兼容性文档第 5 节；
-- Android 端未验证（x86 模拟器无法运行带扩展的浏览器，需 ARM 真机）；
-- WebDAV 服务端需支持 MKCOL/PUT/GET（坚果云已验证全通，PUT 前须先建父目录，fork 已内置处理）。
+- 基于 uBO **1.75.1.16（Manifest V2）**。Chrome 137+ 已禁用 MV2（Chrome/Edge 商店与加载均不可用）；
+- **坚果云 Android 端证书链缺陷**：服务器缺中间证书，Android Chromium 禁用 AIA 补链会被拒（桌面端不受影响）。Android 端建议换 InfiniCLOUD/TeraCLOUD/自建 Nextcloud；
+- Turbo 154 拒绝自签 crx 安装且 policy 服务被剥离无法白名单（已提 [issue #724](https://github.com/tbrowser/Turbo-Browser/issues/724)），该浏览器用 `--load-extension` 方案。
 
 ---
 
