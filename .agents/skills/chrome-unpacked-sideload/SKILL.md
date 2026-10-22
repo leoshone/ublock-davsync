@@ -1,12 +1,12 @@
 ---
 name: chrome-unpacked-sideload
-description: 在本机 Windows Chrome（137+，含 155）上自动侧载未打包扩展的唯一可靠方法。当需要在 Chrome 中加载本地扩展目录做测试、而 --load-extension 已失效时使用。涵盖：开发者模式开启、加载未打包对话框自动化、MV2 兼容性判断、屏幕截图验证。触发词：侧载、加载扩展、load-extension、加载未打包、chrome://extensions、扩展测试。
+description: 扩展侧载与测试的全平台操作手册（实测验证）。覆盖：① Windows Chrome 137+ 对话框自动化（--load-extension 失效场景）② Android Kiwi x86 adb 全自动 zip 加载 ③ 桌面国产浏览器（Turbo/百分，保留 MV2，双向同步 E2E 已通）。触发词：侧载、加载扩展、load-extension、加载未打包、chrome://extensions、扩展测试、Kiwi、Turbo、百分、双向同步。
 ---
 
-# Chrome 未打包扩展侧载（Windows 自动化）
+# 扩展侧载与测试手册（Windows / Android / 桌面国产浏览器）
 
-> 适用：本机 Windows Chrome ≥ 137（验证于 Chrome 155.0.8059.85）。
-> 范围：**项目级 skill**——仅在本工作区（uBlock DAV-Sync fork）扩展测试场景下加载，勿入全局。
+> 范围：**项目级 skill**——本工作区（uBlock DAV-Sync fork）扩展测试专用。
+> 章节：① Windows Chrome 137+（MV2 被拒场景）② Android Kiwi x86 ③ 桌面国产浏览器 Turbo/百分（MV2 E2E 主载体）。
 
 ## 核心事实（2026-10 实测）
 
@@ -232,14 +232,6 @@ curl http://127.0.0.1:9444/json   # 列 targets；扩展后台页类型是 "othe
 
 ---
 
-## 本项目上下文备注
-
-- 被测扩展：本仓库构建产物 `dist/build/uBlock0.davsync-*.zip` 解包目录（uBlock0.chromium/）。
-- 测试 profile：`_tmp/davtest/win-chrome/`；CDP 端口 9222。
-- 完整兼容性验证与侧载结论见 `docs/DAVSYNC-TESTING.md`。
-
----
-
 ## 桌面国产浏览器路线：Turbo / 百分（实测可行 ✅）
 
 国产 Chromium 内核浏览器保留 MV2 支持，且 `--load-extension` **仍然有效**（Google Chrome 155 已移除）。适合桌面双端/多端 E2E。
@@ -292,3 +284,13 @@ extensions.settings.<ext-id>.state = 1
 #       或直接 grep profile/Default/Local Extension Settings/<id>/ 的 LevelDB（strings 可读）
 ```
 
+---
+
+## 本项目上下文备注
+
+- 被测扩展：本仓库构建产物 `dist/build/uBlock0.davsync-*.zip`（解包目录 uBlock0.chromium/）。
+- 测试 profile 与 CDP 端口：win-chrome/9222、turbo-chrome/9333、cent-chrome/9443、Kiwi forward 9444。
+- 完整兼容性验证与 E2E 结论见 `docs/DAVSYNC-TESTING.md`。
+- davsync 配置键：`davSyncConfig`（storage.local）；状态键：`davSyncState`。
+- 修正（2026-10-22）：Turbo 亦可用 Preferences 预写法（本次双向测试未试，理论同百分；
+  若 Turbo 有 HMAC 校验则回落会话内 setEnabled）。

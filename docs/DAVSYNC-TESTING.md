@@ -1,27 +1,30 @@
 # DAV-Sync 载体兼容性验证与扩展侧载方法
 
-> 性质说明：这**不是** davsync 同步功能的测试报告——受 MV2 限制，fork 在本轮所有载体上均未能真正运行，同步链路（配置→同步→恢复→比对）尚未执行过。本文记录的是：
-> 1. 各候选载体对「带扩展的 uBO fork」的兼容性验证结论；
-> 2. 坚果云 WebDAV 后端连通性验证；
-> 3. Chrome 137+ 未打包扩展侧载的完整自动化方法（可复用）。
->
-> 真正的功能测试报告待 MV2 载体（百分浏览器等）就绪后另行产出。本文持续迭代，最新验证记录见文末 changelog。
+> 性质说明：本文是 davsync fork 的**载体兼容性验证 + 侧载方法 + 功能 E2E** 三合一记录，按时间线追加（早期结论可能被后续章节推翻，以最新章节为准）：
+> 1. 各候选载体对「带扩展的 uBO fork」的兼容性验证结论（第 1-2 节为早期失败记录，第 7/9/10 节为成功载体）；
+> 2. 坚果云 WebDAV 后端验证（第 3 节，桌面通；Android 端有证书链问题见 7.3）；
+> 3. 各平台扩展侧载的完整自动化方法（详见 `.agents/skills/chrome-unpacked-sideload/SKILL.md`）；
+> 4. **功能 E2E：单端 push、跨端 pull、双向同步均已真实跑通（第 9/10 节）**。
 >
 > 对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
 > 产物：`dist/build/uBlock0.davsync-1.75.1.16.zip` 及解包目录
 > 环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
 
-## 总结论
+## 总结论（2026-10-22 更新）
 
-**fork 代码本身无问题（语法、模块加载、设置页 UI 均正常），同步后端 WebDAV 全通；但当前主流载体均无法运行 MV2 构建或扩展子系统：**
+**fork 同步功能已在真实载体上端到端跑通（多端双向）。早期被否决的 Kiwi 已被推翻（有 x86 构建）。**
 
-| 载体 | 结果 | 根因 |
+| 载体 | 结果 | 说明 |
 |---|---|---|
-| 桌面 Chrome 155 | ❌ 无法加载 | Chrome 137+ 彻底移除 MV2 支持，弹窗明示「不受支持的清单版本」 |
-| MuMu 内 Quetta 2.0.8（Chromium 148，arm64） | ⚠️ 扩展可注入、无法运行 | houdini ARM 翻译下渲染进程 seccomp 沙箱 syscall 被内核 SIGSYS(31) 全灭 |
-| MuMu 自带 Chromium 110（x86_64） | ❌ 无扩展子系统 | Trichrome 构建未编译 extensions 模块 |
-| Kiwi Browser | ❌ 不可用 | 官方已停更，仅 ARM 包（与 Quetta 同样 SIGSYS 命运） |
-| 坚果云 WebDAV | ✅ 全通 | PROPFIND 207 / MKCOL 201 / PUT 201 / GET 200 |
+| 桌面 Turbo 154 | ✅ **E2E 通过** | `--load-extension` 有效；会话内 setEnabled 启用；详见第 9 节 |
+| 桌面百分 150 | ✅ **E2E 通过** | Preferences 预写持久启用；详见第 10 节 |
+| 桌面 Chrome 155 | ❌ 无法加载 | Chrome 137+ 移除 MV2（早期记录，第 1 节） |
+| MuMu Quetta 2.0.8（arm64） | ⚠️ SIGSYS 全灭 | houdini 翻译问题；**换 Kiwi x86 即解**（第 2/7 节） |
+| MuMu Chromium 110 | ❌ 无扩展子系统 | Trichrome 构建（第 2 节） |
+| MuMu Kiwi x86 | ⚠️ 扩展运行 ✅ / 同步被证书阻断 | 同步受坚果云 Android 证书链问题阻（第 7 节） |
+| 坚果云 WebDAV | ✅ 桌面全通 | Android 端证书链缺陷（7.3 节），桌面无影响 |
+
+**多端双向同步闭环（Turbo ⇄ 坚果云 ⇄ 百分）已验证：push / pull / lock / size 校验 / 冲突守卫全部按设计工作（第 9/10 节）。**
 
 ---
 
@@ -84,11 +87,11 @@ GET     .../test.txt      → 200 OK
 4. 屏幕验证：`PrintWindow` 按窗口抓图 + 物理像素定位（本机 DPI 缩放 1.5，物理坐标 ÷1.5 = 逻辑坐标）；toggle 蓝/灰像素统计判断开关状态；
 5. RDP 后台会话下键盘/鼠标注入受限（与既往实测一致），结论性验证需前台会话。
 
-## 5. 下一步建议（按优先级）
+## 5. 下一步建议（2026-10-22 状态更新）
 
-1. **最短路径**：本机安装百分浏览器（保留 MV2 的 Chromium 内核），加载本 fork，配置坚果云做双端同步实测——fork 与后端都已就绪，只差载体；
+1. ~~本机安装百分浏览器做双端实测~~ → **已完成**（第 9/10 节，含 Turbo）；
 2. **长期方案**：MV3 移植。`src/js/davsync.js` 的 WebDAV 客户端 / 调度 / 快照逻辑约 90% 可平移到 uBOL（uBlock Origin Lite，declarativeNetRequest + Service Worker）；需重写「备份/恢复全部设置」的 userdata 通道并适配 SW 唤醒；
-3. Android 端验证换 ARM 真机进行。
+3. Android 端：Kiwi x86 已可运行扩展（第 7 节），剩余阻塞是坚果云 Android 证书链问题（7.3）——换 WebDAV 服务商（InfiniCLOUD/TeraCLOUD 等）即可复测，无需 ARM 真机。
 
 ## 6. 附加评估：browser-skill（Playwright 类自动化）对安装与测试的价值
 
@@ -129,10 +132,6 @@ davsync 的验证需求链——填 WebDAV 配置 → 触发同步 → 断言云
 | `src/js/messaging.js` / `src/js/start.js` | 消息路由与启动挂钩 |
 
 ---
-
-## Changelog
-
-- **2026-10-22**：首版。完成 Chrome 155 / MuMu（Quetta、Chromium 110）/ 坚果云 WebDAV 兼容性验证；沉淀 Chrome 137+ 侧载自动化方法；追加 browser-skill 评估（第 6 节）。
 
 ## 7. Kiwi Browser（x86 官方构建）实测 —— 2026-10-22 追加
 
@@ -205,15 +204,15 @@ fetch(url, {
 - 无证书/TLS 特殊逻辑、无自定义 https agent——它的坚果云兼容性完全来自**桌面浏览器内核的 AIA 证书补链**（与第 7.3 节结论一致：Android 端 floccus + 坚果云同样会被 ERR_CERT_AUTHORITY_INVALID 挡住，并非 floccus 有魔法）。
 - 权限形态：MV3（git 主干）`host_permissions: ['*://*/*']`；用户装的 5.11.0 xpi 为 MV2 `permissions: ['*://*/*']`。**与我们的 `<all_urls>` 等价**，权限不是差异点。
 
-### 8.2 值得吸收的 4 个工程实践（我们 davsync.js 目前缺的）
+### 8.2 值得吸收的 4 个工程实践（**已全部落地**，见第 9 节 commit 963e3b864）
 
 | # | floccus 做法 | davsync.js 现状 | 建议 |
 |---|---|---|---|
-| 1 | `redirect: 'manual'`（可配 allowRedirects），status 0 视为 RedirectError | 未设置（follow 默认） | **加 `redirect: 'manual'`**：防 302 重定向吞掉 Authorization 头导致假 401/丢失 body |
-| 2 | PUT 后 `verifyUploadedFileSize`：PROPFIND 读 getcontentlength 比对，不符重试（PUT_FILE_SIZE_RETRIES） | PUT 即认为成功 | **加读回校验 + 有限重试**：坚果云偶发写入静默截断时保证一致性 |
-| 3 | Lock 文件防多端并发：sync 前 PUT lock 文件，409/423 → ResourceLockedError；sync 中每 2min 续锁 | 无锁（靠 lastSyncTime 粗协调） | **加 lock 文件**：双端同时 sync 时的文件竞争是真实风险（本 fork 定位就是多端同步） |
-| 4 | MOVE 409 时「删目标再 MOVE 重试一次」的恢复逻辑 | 不适用（我们无 MOVE） | 参考其「一次容错重试」模式 |
-| 5（顺带） | `cache: 'no-store'`、`credentials: 'omit'`、`signal: abortSignal`（可取消） | 前 两者已有；无可取消 | 低优先级：同步可取消体验项 |
+| 1 | `redirect: 'manual'`，status 0 视为 RedirectError | 原缺 | ✅ 已加（重定向显式报错） |
+| 2 | PUT 后 `verifyUploadedFileSize` 读回比对重试 | 原缺 | ✅ 已加 `davPutVerified`（服务器无 getcontentlength 时降级信任 2xx） |
+| 3 | Lock 文件防多端并发（409/423 处理） | 原缺 | ✅ 已加（5min TTL，sync 完自动清除，E2E 验证） |
+| 4 | MOVE 409「删目标重试一次」 | 我们无 MOVE | 参考其容错模式 |
+| 5（顺带） | `signal: abortSignal` 可取消 | 无 | 低优先级体验项，未做 |
 
 ### 8.3 floccus 的 409 语义与我们的差异（重要确认）
 
@@ -292,4 +291,10 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
   验证；或彻底绕开 UI（Preferences 预写 / CDP API）。
 - 多浏览器并行时 `/json/new?chrome://extensions/` 的 PUT 偶发失败，重试即可。
 
+---
 
+## Changelog
+
+- **2026-10-22 上午**：首版。Chrome 155 / MuMu（Quetta、Chromium 110）/ 坚果云 WebDAV 兼容性验证；沉淀 Chrome 137+ 侧载自动化方法；browser-skill 评估（第 6 节）。
+- **2026-10-22 午后**：Kiwi x86 实测（第 7 节，推翻"仅 ARM"结论；发现坚果云 Android 证书链缺陷）；floccus 源码参考分析（第 8 节）；Turbo 154 E2E 首次真实同步成功，修复 3 个 fork bug（第 9 节）；davsync.js 落地 floccus 式 4 项加固。
+- **2026-10-22 下午**：百分 × Turbo 双向同步 E2E 全通（第 10 节）；SKILL 沉淀桌面国产浏览器路线与 Preferences 预写法。
