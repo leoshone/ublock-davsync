@@ -80,6 +80,35 @@ GET     .../test.txt      → 200 OK
 2. **长期方案**：MV3 移植。`src/js/davsync.js` 的 WebDAV 客户端 / 调度 / 快照逻辑约 90% 可平移到 uBOL（uBlock Origin Lite，declarativeNetRequest + Service Worker）；需重写「备份/恢复全部设置」的 userdata 通道并适配 SW 唤醒；
 3. Android 端验证换 ARM 真机进行。
 
+## 6. 附加评估：browser-skill（Playwright 类自动化）对安装与测试的价值
+
+> 纯讨论结论，2026-10-22。
+
+### 安装环节：帮助很小
+
+两个真正的瓶颈它都绕不过：
+
+1. **MV2 被拒**是 Chrome 扩展系统的策略层决定，报错发生在加载管线内部，不是 UI 自动化能改变的——「不受支持的清单版本」弹窗照样出现；
+2. **原生目录对话框**：Playwright 的 `setFileInputFiles` 只对网页 `<input type=file>` 有效，`chrome://extensions` 弹的是 Win32 IFileDialog，CDP 够不着。本文第 4 节的 UIA + SendInput + WM_SETTEXT 方案已是目前更深的手段。
+
+但存在一个**未实测的正规通道**：CDP `Extensions.loadUnpacked` 命令（Chrome 126+，要求以 `--remote-debugging-pipe` 而非 port 启动），可命令浏览器直接加载目录、完全跳过对话框。它同样过不了 MV2 校验——对 MV2 fork 无用；**对将来 MV3 移植则是一条命令装完、零对话框**。
+
+### 测试环节：价值明显
+
+davsync 的验证需求链——填 WebDAV 配置 → 触发同步 → 断言云端文件 → 第二实例恢复设置 → 比对——本次用裸 CDP websocket 手写跑通，能跑但不可维护。流程化工具（browser-skill / Playwright）的增益：
+
+- **回归测试可重复**：改一行 davsync.js → 一条命令跑完整同步链路；
+- **跨浏览器矩阵**：若能 attach 到百分 / 360 极速等 MV2 载体（Chromium 内核可开调试端口），正好补上「真正接受 MV2 的环境」里的自动化空缺；
+- **uBOL MV3 移植后**：Playwright 自带 Chromium + `Extensions.loadUnpacked`，安装与测试一条龙。
+
+### 结论与引入条件
+
+- 现阶段（MV2 fork）：优先级不高——决定性变量是载体浏览器支不支持 MV2，不是自动化工具；UIA 脚本已沉淀在 `artifacts` 分支 `scripts/ublock-sideload.py`；
+- 引入前先验证一件事：它能否 attach 到自定义 `--user-data-dir` 的隔离实例（而非只驱动日常主浏览器）。能则作为测试层工具引入，不能则继续用裸 CDP（`--remote-debugging-port=9222`）方案；
+- 做 MV3 移植时再上：彼时「browser-skill + CDP loadUnpacked」组合收益最大。
+
+**一句话**：它是测试放大器，不是安装钥匙——钥匙仍是「MV2 载体浏览器」或「移植 MV3」。
+
 ## 附：fork 变更清单（commit 22efe91）
 
 | 文件 | 变更 |
