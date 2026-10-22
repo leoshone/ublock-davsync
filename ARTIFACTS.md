@@ -32,7 +32,7 @@
 | `uBlock0.davsync-1.75.1.16.crx` | CRX3（crx3 工具签名）。百分等拖拽/命令行安装（需开发者模式开） |
 | `uBlock0.davsync-1.75.1.16.zip` | Kiwi zip 按钮加载 / 手工解压 --load-extension |
 | `uBlock0.davsync-1.75.1.16.firefox.xpi` | Firefox/gecko 构建。web-ext 临时加载（会话级） |
-| `ublock-davsync.key` | RSA 私钥（PEM）。**保持不变则扩展 ID 恒定 = `odecihgahfphabajblgnmopeibmkhifp`**。敏感：仓库转公开前须移走 |
+| `secrets/davsync-key.pem.enc` | RSA 私钥的 **AES-256 加密密文**（密文可公开；口令自存密码管理器）。解密/重加密方法见 artifacts 分支 `secrets/README.md`。**保持 key 不变则扩展 ID 恒定 = `odecihgahfphabajblgnmopeibmkhifp`** |
 
 > ⚠️ 2026-10-22 换过一次 key：旧 ID `mggocpoe...` 已废弃，现 ID `odecihgahfphabajblgnmopeibmkhifp`。
 > manifest.json 已内嵌公钥（`key` 字段），重打包用 `node tools/make-packages.cjs` 即可。
