@@ -1,7 +1,7 @@
 # uBlock DAV-Sync 测试产物与可复用工具
 
-> 主仓库：[leoshone/ublock-davsync](https://github.com/leoshone/ublock-davsync)（fork 源码 + 兼容性验证与侧载方法 `docs/DAVSYNC-TESTING.md`）
-> 本目录：真机测试过程中沉淀的**可复用产物**——构建包、密钥、自动化脚本、WorkBuddy skill。
+> 主仓库：[leoshone/ublock-davsync](https://github.com/leoshone/ublock-davsync)（fork 源码 + 兼容性验证与侧载方法 `docs/DAVSYNC-TESTING.md` + Agent Skill `.agents/skills/`）
+> 本目录（artifacts 分支）：真机测试沉淀的**可复用产物**——构建包、密钥、自动化脚本。
 
 ## 目录
 
@@ -11,7 +11,8 @@
 | `build/ublock-davsync.key` | 扩展 RSA 私钥（PEM）。manifest 中的 `key` 公钥由此派生，**保持此密钥不变则扩展 ID 恒定**（`mggocpoejajooeoecednjapaeafnhiie`）。勿泄露、勿提交到公共仓库 |
 | `scripts/ublock-sideload.py` | Chrome 137+（实测 155）未打包扩展侧载自动化：UIA 开开发者模式 → SendInput 点「加载未打包」→ WM_SETTEXT 填路径 → 真实点击确认 |
 | `scripts/dav-smoke-test.sh` | 坚果云 WebDAV 连通性冒烟测试（PROPFIND/MKCOL/PUT/GET） |
-| `skill/SKILL.md` | WorkBuddy 项目级 skill：`chrome-unpacked-sideload`（完整方法论 + 失败速查表） |
+
+Agent Skill（`chrome-unpacked-sideload` 侧载手册）已移至 **master 分支 `.agents/skills/chrome-unpacked-sideload/SKILL.md`**，随源码一起分发。
 
 ## 快速使用
 
