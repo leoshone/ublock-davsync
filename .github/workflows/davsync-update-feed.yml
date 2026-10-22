@@ -1,0 +1,52 @@
+name: DavSync update feed
+
+# 发 Release 后自动重写 docs/update.xml（version + codebase 对齐本次 Release），
+# 并提交回 master，让已装用户的浏览器在更新周期内自动收到新版。
+# 无需手工编辑 update.xml。
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-feed:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Write update.xml
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # tag 形如 v1.75.1.16；资产名形如 uBlock0.davsync_v1.75.1.16.chromium.crx
+          VERSION="${TAG#v}"
+          cat > docs/update.xml <<XML
+          <?xml version="1.0" encoding="UTF-8"?>
+          <gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">
+            <app appid="ODECIHGAHFPHABAJBLGNMOPEIBMKHIFP">
+              <updatecheck codebase="https://github.com/leoshone/ublock-davsync/releases/download/${TAG}/uBlock0.davsync_${VERSION}.chromium.crx" version="${VERSION}" />
+            </app>
+          </gupdate>
+          XML
+          cat docs/update.xml
+
+      - name: Commit and push
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name "DavSync update bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/update.xml
+          if git diff --cached --quiet; then
+            echo "update.xml unchanged"
+            exit 0
+          fi
+          git commit -m "update feed: ${TAG}"
+          git push origin master
