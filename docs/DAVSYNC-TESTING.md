@@ -184,3 +184,42 @@ Network.loadingFailed      net::ERR_CERT_AUTHORITY_INVALID
 - 截屏需 `screencap -d <uid>`，uid 从 `dumpsys display` 全量枚举后逐个试（只拉 >100KB 的有内容屏）；
 - **扩展后台服务不受前台/虚拟屏影响**——davsync 的 alarm 与 storage 在后台正常执行，UI 只是观察窗口。
 
+## 8. Floccus 源码参考分析 —— 2026-10-22 追加
+
+> 背景：用户在桌面 Turbo 浏览器用 Floccus 扩展实测坚果云 WebDAV 通过。克隆 floccusaddon/floccus 源码（另：MuMu 里的 floccus.xpi 为 5.11.0 MV2 签名包）对比分析。
+
+### 8.1 核心结论：floccus 对坚果云没有任何特殊处理
+
+`src/lib/adapters/WebDav.ts`（901 行）就是朴素的 `fetch + Basic auth`：
+
+```js
+fetch(url, {
+  method: 'PUT',
+  headers: { 'Content-Type': type, Authorization: 'Basic ' + btoa(user + ':' + pass) },
+  credentials: 'omit',
+  ...(!allowRedirects && {redirect: 'manual'}),
+  body: data,
+})
+```
+
+- 无证书/TLS 特殊逻辑、无自定义 https agent——它的坚果云兼容性完全来自**桌面浏览器内核的 AIA 证书补链**（与第 7.3 节结论一致：Android 端 floccus + 坚果云同样会被 ERR_CERT_AUTHORITY_INVALID 挡住，并非 floccus 有魔法）。
+- 权限形态：MV3（git 主干）`host_permissions: ['*://*/*']`；用户装的 5.11.0 xpi 为 MV2 `permissions: ['*://*/*']`。**与我们的 `<all_urls>` 等价**，权限不是差异点。
+
+### 8.2 值得吸收的 4 个工程实践（我们 davsync.js 目前缺的）
+
+| # | floccus 做法 | davsync.js 现状 | 建议 |
+|---|---|---|---|
+| 1 | `redirect: 'manual'`（可配 allowRedirects），status 0 视为 RedirectError | 未设置（follow 默认） | **加 `redirect: 'manual'`**：防 302 重定向吞掉 Authorization 头导致假 401/丢失 body |
+| 2 | PUT 后 `verifyUploadedFileSize`：PROPFIND 读 getcontentlength 比对，不符重试（PUT_FILE_SIZE_RETRIES） | PUT 即认为成功 | **加读回校验 + 有限重试**：坚果云偶发写入静默截断时保证一致性 |
+| 3 | Lock 文件防多端并发：sync 前 PUT lock 文件，409/423 → ResourceLockedError；sync 中每 2min 续锁 | 无锁（靠 lastSyncTime 粗协调） | **加 lock 文件**：双端同时 sync 时的文件竞争是真实风险（本 fork 定位就是多端同步） |
+| 4 | MOVE 409 时「删目标再 MOVE 重试一次」的恢复逻辑 | 不适用（我们无 MOVE） | 参考其「一次容错重试」模式 |
+| 5（顺带） | `cache: 'no-store'`、`credentials: 'omit'`、`signal: abortSignal`（可取消） | 前 两者已有；无可取消 | 低优先级：同步可取消体验项 |
+
+### 8.3 floccus 的 409 语义与我们的差异（重要确认）
+
+floccus 假定**用户在 UI 里已选好存在的目录**，自身从不 MKCOL；409 只在 MOVE/lock 场景出现并按冲突处理。我们的 davsync 会自动 `davMkdirp` 建目录树（对坚果云 409 AncestorsNotFound 已有处理），**这点比 floccus 更适合「开箱即用」**，保留。
+
+### 8.4 用户桌面 Turbo 实测带来的新信息
+
+Turbo（国产 Chromium 内核）+ Floccus + 坚果云全通 —— 再次印证桌面端证书补链无虞。**Turbo 同时也是本 fork MV2 包的合格候选载体**（保留 MV2 的国产内核，见第 5 节建议 1），可作为桌面双端实测的另一端。
+
