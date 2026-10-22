@@ -114,5 +114,6 @@
   "version": "1.15.11.0",
   "web_accessible_resources": [
     "/web_accessible_resources/*"
-  ]
+  ],
+  "update_url": "https://raw.githubusercontent.com/leoshone/ublock-davsync/master/docs/update.xml"
 }
