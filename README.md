@@ -1,6 +1,6 @@
 # uBlock DAV-Sync 测试产物与可复用工具
 
-> 主仓库：[leoshone/ublock-davsync](https://github.com/leoshone/ublock-davsync)（fork 源码 + 测试报告 `docs/DAV-SYNC-TESTING-2026-10-22.md`）
+> 主仓库：[leoshone/ublock-davsync](https://github.com/leoshone/ublock-davsync)（fork 源码 + 兼容性验证与侧载方法 `docs/DAVSYNC-COMPAT-AND-SIDELOAD-2026-10-22.md`）
 > 本目录：真机测试过程中沉淀的**可复用产物**——构建包、密钥、自动化脚本、WorkBuddy skill。
 
 ## 目录
@@ -37,7 +37,7 @@ DAV_USER=you@example.com DAV_PASS=应用密码 bash scripts/dav-smoke-test.sh ht
 
 在主仓库执行 `make chromium`（uBO 官方构建链），产物即 `uBlock0.davsync-<版本>.zip`。
 
-## 关键结论速查（详见主仓库测试报告）
+## 关键结论速查（详见主仓库兼容性验证文档）
 
 - Chrome 137+ 已移除 `--load-extension`；MV2 扩展在 Chrome 155 弹窗明示「不受支持的清单版本」；
 - 侧载唯一通道 = `chrome://extensions` 页内开发者模式 + 原生目录对话框自动化；
