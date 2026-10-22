@@ -71,9 +71,18 @@ const davRequest = async function(config, method, filePath, details = {}) {
             body: details.body,
             credentials: 'omit',
             cache: 'no-store',
+            // Floccus-style hardening: a 302 (e.g. captive portal, expired
+            // session HTML login page) would silently drop the Authorization
+            // header and return an HTML body that fails JSON.parse -- much
+            // harder to diagnose than an explicit redirect error.
+            redirect: 'manual',
         });
     } catch (reason) {
         return { ok: false, error: `network: ${reason}` };
+    }
+    // Redirects are not followed (see above): report them explicitly.
+    if ( response.status >= 300 && response.status < 400 ) {
+        return { ok: false, status: response.status, error: `redirect ${response.status} (check server URL)` };
     }
     // 404 is a normal condition on first sync (file not yet created).
     if ( response.status === 404 && details.allowNotFound === true ) {
@@ -104,6 +113,37 @@ const davPut = function(config, text, ifMatch = '') {
     });
 };
 
+// Floccus-style upload verification: re-read the file size via PROPFIND and
+// compare against what we sent. Catches silent server-side truncation
+// (observed on flaky WebDAV providers) before we record a good sync state.
+const PUT_VERIFY_RETRIES = 2;
+
+const davGetRemoteFileSize = async function(config) {
+    const result = await davRequest(config, 'PROPFIND', config.filePath, {
+        headers: { Depth: '0' },
+    });
+    if ( result.ok === false ) { return null; }
+    const m = result.text.match(/<[\w-]*:?getcontentlength[^>]*>(\d+)</);
+    return m ? parseInt(m[1], 10) : null;
+};
+
+const davPutVerified = async function(config, text, ifMatch = '') {
+    const expected = new TextEncoder().encode(text).length;
+    for ( let attempt = 0; ; attempt++ ) {
+        const put = await davPut(config, text, ifMatch);
+        if ( put.ok === false ) { return put; }
+        const remoteSize = await davGetRemoteFileSize(config);
+        if ( remoteSize === null ) {
+            // Server does not expose getcontentlength: trust the 2xx.
+            return put;
+        }
+        if ( remoteSize === expected ) { return put; }
+        if ( attempt >= PUT_VERIFY_RETRIES ) {
+            return { ok: false, error: `upload size mismatch after ${attempt + 1} attempts (${remoteSize} != ${expected})` };
+        }
+    }
+};
+
 // Ensure the remote folder exists (Jianguoyun returns 409 Conflict on
 // PUT into a missing collection).
 const davMkdirp = async function(config) {
@@ -119,10 +159,57 @@ const davMkdirp = async function(config) {
                     ? { Authorization: 'Basic ' + btoa(`${config.username}:${config.password}`) }
                     : {},
                 credentials: 'omit',
+                redirect: 'manual',
             });
         } catch {
         }
     }
+};
+
+/******************************************************************************/
+// Floccus-style lock file: prevents two devices from syncing simultaneously
+// and clobbering each other (our If-Match guard only protects single-PUT
+// races; a full sync cycle is read-modify-write and needs mutual exclusion).
+
+const DAV_LOCK_PATH = 'ublock-davsync/ublock-sync.lock';
+const LOCK_TTL_MS = 5 * 60 * 1000;   // stale after 5 minutes (crashed device)
+
+const davLockPath = function(config) {
+    // Lock lives next to the data file, honouring a custom filePath.
+    const dir = config.filePath.split('/').slice(0, -1).join('/');
+    return dir !== '' ? `${dir}/ublock-sync.lock` : DAV_LOCK_PATH.split('/').pop();
+};
+
+// Returns true if the lock was acquired.
+const davLockAcquire = async function(config) {
+    const lockPath = davLockPath(config);
+    // Read existing lock: if fresh, somebody else is syncing right now.
+    const existing = await davRequest(config, 'GET', lockPath, {
+        allowNotFound: true,
+    });
+    if ( existing.ok === true && existing.notFound !== true ) {
+        try {
+            const info = JSON.parse(existing.text);
+            if ( Date.now() - (info.timeStamp || 0) < LOCK_TTL_MS ) {
+                return false;   // someone else holds a live lock
+            }
+        } catch {
+            // Unparseable lock: treat as stale and take over.
+        }
+    }
+    const put = await davRequest(config, 'PUT', lockPath, {
+        body: JSON.stringify({
+            timeStamp: Date.now(),
+            deviceName: config.deviceName || '',
+        }, null, 1),
+    });
+    return put.ok === true;
+};
+
+const davLockRelease = async function(config) {
+    await davRequest(config, 'DELETE', davLockPath(config), {
+        allowNotFound: true,
+    });
 };
 
 /******************************************************************************/
@@ -158,7 +245,10 @@ const saveConfig = function( ) {
 const collectLocalData = async function( ) {
     // Imported lazily to avoid module-load order issues: this module is
     // loaded after ublock.js/messaging.js at runtime (ES module graph).
-    const { default: µb } = await import('./ublock.js');
+    // µBlock instance lives in background.js; user-facing helpers live in
+    // ublock.js (which extends the instance).
+    const µb = (await import('./background.js')).default;
+    const ub = await import('./ublock.js');
     const { permanentFirewall, permanentSwitches, permanentURLFiltering } =
         await import('./filtering-engines.js');
 
@@ -228,6 +318,28 @@ const runSyncOnce = async function( ) {
 
     await Promise.all([ configReady, stateReady ]);
 
+    // 0. Mutual exclusion: another device may be mid-sync. One retry after
+    // a short wait covers the common "both devices hit the periodic alarm"
+    // case without complicating the caller.
+    let locked = await davLockAcquire(config);
+    if ( locked === false ) {
+        await new Promise(resolve => setTimeout(resolve, 8000));
+        locked = await davLockAcquire(config);
+        if ( locked === false ) {
+            syncState.lastError = 'locked-by-other-device';
+            saveSyncState();
+            return syncState.lastError;
+        }
+    }
+
+    try {
+        return await runSyncOnceLocked();
+    } finally {
+        davLockRelease(config);
+    }
+};
+
+const runSyncOnceLocked = async function( ) {
     // 1. Fetch remote
     let remote = await davGet(config);
     if ( remote.ok === false ) {
@@ -243,7 +355,7 @@ const runSyncOnce = async function( ) {
     // 2. Remote empty -> first push
     if ( remote.notFound === true ) {
         const put = await davMkdirp(config).then(( ) =>
-            davPut(config, JSON.stringify(local, null, 1))
+            davPutVerified(config, JSON.stringify(local, null, 1))
         );
         if ( put.ok === false ) {
             syncState.lastError = put.error;
@@ -284,7 +396,7 @@ const runSyncOnce = async function( ) {
 
     // 5. Local dirty & remote unchanged since we last saw it -> push
     if ( localDirty && ( remoteMatchesLastEtag || remoteFp === syncState.lastLocalFingerprint ) ) {
-        const put = await davPut(
+        const put = await davPutVerified(
             config,
             JSON.stringify(local, null, 1),
             syncState.lastEtag
@@ -348,7 +460,7 @@ const runSyncOnce = async function( ) {
 // then restarts the extension so all engines reload cleanly.
 
 const applyRemoteData = async function(data) {
-    const µb = (await import('./ublock.js')).default;
+    const µb = (await import('./background.js')).default;
     const cacheStorage = (await import('./cachestorage.js')).default;
     const io = (await import('./assets.js')).default;
     const { FilteringContext } = await import('./filtering-context.js');
@@ -431,7 +543,12 @@ const schedulePeriodicSync = function( ) {
         vAPI.alarms.clear(SYNC_ALARM_NAME);
         return;
     }
-    vAPI.alarms.createIfNotPresent(SYNC_ALARM_NAME, {
+    // Unconditional create: alarms persist across browser restarts in the
+    // profile, so createIfNotPresent would keep the stale schedule forever
+    // and the "first sync 2 min after launch" promise would never hold.
+    // Recreating on every launch resets the initial delay while keeping the
+    // same 30-minute period. Same (name, ...args) shape the vAPI wrapper uses.
+    vAPI.alarms.create(SYNC_ALARM_NAME, {
         delayInMinutes: SYNC_INITIAL_DELAY_MIN,
         periodInMinutes: SYNC_PERIOD_MIN,
     });
@@ -569,6 +686,27 @@ vAPI.alarms.onAlarm.addListener(alarm => {
 
 // Kick scheduling once config is loaded.
 configReady.then(( ) => { schedulePeriodicSync(); });
+
+// Startup sync, independent of the alarm system. The periodic alarm covers
+// long-running sessions, but MV2 background pages can be started at any time
+// (browser launch, extension reload) and the alarm path has proven flaky on
+// some Chromium forks (Turbo 154: alarm fires but the packaged listener does
+// not run). A short timer here guarantees an attempt per launch; the
+// ETag/fingerprint bookkeeping makes redundant attempts harmless no-ops.
+const startupSync = ( ) => {
+    runSyncOnce().then(status => {
+        if ( status === 'pulled' ) { vAPI.app.restart(); }
+    }).catch(reason => {
+    });
+};
+configReady.then(( ) => {
+    if ( config.enabled !== true ) { return; }
+    // Native setTimeout on purpose: vAPI.defer proved unreliable across
+    // Chromium forks (works in Kiwi 137, misbehaves in Turbo 154 where the
+    // scheduled callback silently never fires). No wrapper needed for a
+    // one-shot 18-second delay.
+    setTimeout(startupSync, 18000);
+});
 
 /******************************************************************************/
 
