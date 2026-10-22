@@ -1,9 +1,16 @@
-# DAV-Sync fork 真机测试报告
+# DAV-Sync 载体兼容性验证与扩展侧载方法
 
-> 测试日期：2026-10-22
-> 测试对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
-> 测试产物：`dist/build/uBlock0.davsync-1.75.1.16.zip` 及解包目录
-> 测试环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
+> 性质说明：这**不是** davsync 同步功能的测试报告——受 MV2 限制，fork 在本轮所有载体上均未能真正运行，同步链路（配置→同步→恢复→比对）尚未执行过。本文记录的是：
+> 1. 各候选载体对「带扩展的 uBO fork」的兼容性验证结论；
+> 2. 坚果云 WebDAV 后端连通性验证；
+> 3. Chrome 137+ 未打包扩展侧载的完整自动化方法（可复用）。
+>
+> 真正的功能测试报告待 MV2 载体（百分浏览器等）就绪后另行产出。
+>
+> 日期：2026-10-22
+> 对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
+> 产物：`dist/build/uBlock0.davsync-1.75.1.16.zip` 及解包目录
+> 环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
 
 ## 总结论
 
