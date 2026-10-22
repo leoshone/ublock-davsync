@@ -258,3 +258,38 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 - 多端 pull 闭环（第二台设备 apply remote + restart）待第二个载体就绪后验证。
 - Android（Kiwi）端因坚果云证书问题暂无法闭环（7.3 节），可换 WebDAV 服务商复测。
 
+## 10. 百分 × Turbo 双向同步 E2E —— 2026-10-22 追加（多端闭环全通 ✅）
+
+载体：百分 5.3.1184.25（Chromium 150，deviceName=cent-desktop）× Turbo 154
+（deviceName=turbo-desktop），各自独立测试 profile，坚果云同一目录。
+
+### 10.1 结果
+
+| 步骤 | 动作 | 云端/对端验证 |
+|---|---|---|
+| 1 | Turbo 首次 push（badge=false） | 云端 deviceName=turbo-desktop ✅ |
+| 2 | 百分启用扩展 → 启动同步 pull + push | 百分本地 fingerprint 与云端对齐 ✅ |
+| 3 | 百分本地改 badge=true → 重启 → push | 云端 deviceName=cent-desktop ✅ |
+| 4 | Turbo 重启 → **pull**（LevelDB 中 lastDirection=pull 铁证）→ **badge=false 落地** → app.restart | ✅ |
+| 5 | 百分再改 badge=false → push | 云端 badge=false, ts=16:55 ✅ |
+| 6 | Turbo 再 pull（restart 链）| profile LevelDB 中 badge=false、pull 记录 ✅ |
+
+**pull→apply→restart→再启动 的完整生命周期在真实浏览器上运转正常。**
+
+### 10.2 载体行为差异（重要，影响自动化测试设计）
+
+- `--load-extension` 挂载的扩展在 **两个浏览器冷启动后均为 DISABLED**：
+  - Turbo：会话内 CDP `management.setEnabled(id,true)` 即生效；重启失效（Preferences 无持久条目）；
+  - 百分：同 API **报成功但不生效**，必须 UI 开关（且开发者模式默认关）；
+    但 **Preferences 预写 `extensions.settings.<id>.state=1` 冷启动即启用**（百分不做 HMAC 校验）。
+- pull 成功后 `vAPI.app.restart()` 会杀掉 bg → Turbo 的会话级 enabled 丢失。
+  测试脚本要设计成「restart 后重新启用再读状态」，或直接 grep LevelDB 取证。
+
+### 10.3 调试环境陷阱（再次踩到）
+
+- WorkBuddy 常驻抢前台 + 系统装了 strokeit（鼠标手势，hook 并吞掉 SetCursorPos/SendInput，
+  光标会被重置回 (0,0)）→ UI 点击自动化在本机不可靠。缓解：TOPMOST 不取消 + 点击后立即截图
+  验证；或彻底绕开 UI（Preferences 预写 / CDP API）。
+- 多浏览器并行时 `/json/new?chrome://extensions/` 的 PUT 偶发失败，重试即可。
+
+

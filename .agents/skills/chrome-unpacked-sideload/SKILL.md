@@ -237,3 +237,58 @@ curl http://127.0.0.1:9444/json   # 列 targets；扩展后台页类型是 "othe
 - 被测扩展：本仓库构建产物 `dist/build/uBlock0.davsync-*.zip` 解包目录（uBlock0.chromium/）。
 - 测试 profile：`_tmp/davtest/win-chrome/`；CDP 端口 9222。
 - 完整兼容性验证与侧载结论见 `docs/DAVSYNC-TESTING.md`。
+
+---
+
+## 桌面国产浏览器路线：Turbo / 百分（实测可行 ✅）
+
+国产 Chromium 内核浏览器保留 MV2 支持，且 `--load-extension` **仍然有效**（Google Chrome 155 已移除）。适合桌面双端/多端 E2E。
+
+### 启动模板（独立 profile，不污染日常数据）
+
+```bash
+# Turbo 154（D:/Software/Turbo/turbo.exe）
+"D:/Software/Turbo/turbo.exe" --user-data-dir="<test-profile>" --no-first-run   --no-default-browser-check --load-extension="<扩展目录>"   --remote-debugging-port=9333 --window-size=1100,800
+
+# 百分 5.3.1184.25 / Chromium 150（D:/Software/Cent/chrome.exe）
+"D:/Software/Cent/chrome.exe" --user-data-dir="<test-profile>" ... 同上, port=9443
+```
+
+### 关键差异（Turbo/百分 各自的坑）
+
+| 事项 | Turbo 154 | 百分 150 |
+|---|---|---|
+| 扩展初始状态 | 启用 | **DISABLED**（`--load-extension` 挂上但要求手动启用） |
+| 启用方式 | 会话内 `chrome.management.setEnabled(id, true)`（CDP）即生效 | 同 API 报成功**但不生效**，必须走 UI 开关；且需先开右上角「开发者模式」 |
+| 开发者模式默认 | 开 | **关** |
+| 重启后状态 | 回 DISABLED（enabled 是会话级）；Preferences 无持久条目 | **Preferences 预写 `extensions.settings.<id>.state=1` 可持久启用**（百分无 HMAC 校验） |
+| vAPI.defer | `onon` 调度回调静默不执行 → 用原生 setTimeout | 未测，同建议 |
+| MV2 | 完整支持 | 完整支持 |
+
+### 启用流程（百分，UI 自动化）
+
+1. CDP `PUT /json/new?chrome://extensions/` 开扩展页
+2. 鼠标点击「开发者模式」开关（右上角）→ 再点扩展卡片开关
+3. 坐标从 PrintWindow 截图换算（窗口 1650×1200 物理 / 1.5 = 逻辑坐标）
+4. **注意 strokeit 等鼠标手势工具会吞 SendInput/SetCursorPos**：点击后必须截图确认效果；失败就换 Preferences 预写法（更稳）
+
+### Preferences 预写法（推荐，可持久化）
+
+```
+关闭浏览器 → 改 <profile>/Default/Preferences：
+extensions.settings.<ext-id>.state = 1
+→ 冷启动扩展即启用（百分验证通过；Turbo 无此条目、走会话内 setEnabled）
+```
+
+### E2E 同步测试骨架（CDP）
+
+```python
+# 1. bg target = /json 里 url 含 background.html 的 other 类型
+# 2. 配置: chrome.storage.local.set({ davSyncConfig: {...} })   （键须 davSyncConfig）
+# 3. 触发: 重启浏览器（startupSync 18s 后自动跑）或 chrome.alarms.create('davSyncAlarm', {delayInMinutes: 0.2})
+# 4. 验证: vAPI.storage.get('davSyncState') → lastDirection/lastError
+# 5. 云端: curl PROPFIND/GET <url>/<filePath> 比对内容
+# 注意: pull 后 vAPI.app.restart 会杀掉 bg → 会话级 enabled 丢失（Turbo），需重新启用再读状态
+#       或直接 grep profile/Default/Local Extension Settings/<id>/ 的 LevelDB（strings 可读）
+```
+
