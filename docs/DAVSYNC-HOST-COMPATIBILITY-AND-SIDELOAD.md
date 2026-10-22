@@ -5,9 +5,8 @@
 > 2. 坚果云 WebDAV 后端连通性验证；
 > 3. Chrome 137+ 未打包扩展侧载的完整自动化方法（可复用）。
 >
-> 真正的功能测试报告待 MV2 载体（百分浏览器等）就绪后另行产出。
+> 真正的功能测试报告待 MV2 载体（百分浏览器等）就绪后另行产出。本文持续迭代，最新验证记录见文末 changelog。
 >
-> 日期：2026-10-22
 > 对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
 > 产物：`dist/build/uBlock0.davsync-1.75.1.16.zip` 及解包目录
 > 环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
@@ -124,3 +123,9 @@ davsync 的验证需求链——填 WebDAV 配置 → 触发同步 → 断言云
 | `src/js/dav-cloud.js` | +145 行：云端适配层 |
 | `src/js/settings.js` / `src/settings.html` | 设置页 DAV-Sync UI |
 | `src/js/messaging.js` / `src/js/start.js` | 消息路由与启动挂钩 |
+
+---
+
+## Changelog
+
+- **2026-10-22**：首版。完成 Chrome 155 / MuMu（Quetta、Chromium 110）/ 坚果云 WebDAV 兼容性验证；沉淀 Chrome 137+ 侧载自动化方法；追加 browser-skill 评估（第 6 节）。
