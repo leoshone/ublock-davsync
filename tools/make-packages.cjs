@@ -10,8 +10,8 @@
  *   npm install --prefix D:/AiSpaces/Work/2026-10-21-21-29-21/_tmp crx3
  *
  * 产物（dist/build/ 下）：
- *   uBlock0.davsync-<ver>.crx  — 百分等浏览器拖拽/命令行安装（需开发者模式开启）
- *   uBlock0.davsync-<ver>.zip  — Kiwi 扩展页「+ (from .zip)」加载
+ *   uBlock0.davsync_v<ver>.chromium.crx — 百分等浏览器拖拽/命令行安装（需开发者模式开启）
+ *   uBlock0.davsync_v<ver>.chromium.zip — Kiwi 扩展页「+ (from .zip)」加载
  *   crx3tool-zip.zip           — crx3 工具的中间产物（可删）
  *
  * 注意：
@@ -50,17 +50,16 @@ const files = [];
 })(BUILD);
 console.log('files:', files.length);
 
-const crxPath = path.join(OUTDIR, `uBlock0.davsync-${mf.version}.crx`);
-const zipPath = path.join(OUTDIR, `uBlock0.davsync-${mf.version}.zip`);
+const crxPath = path.join(OUTDIR, `uBlock0.davsync_v${mf.version}.chromium.crx`);
+const zipPath = path.join(OUTDIR, `uBlock0.davsync_v${mf.version}.chromium.zip`);
 
 writeCRX3(files, {
     keyPath,
     crxPath,
     zipPath,
 }).then(() => {
-    // zip 与 crx 的 payload 相同，直接把工具的中间 zip 复制为 .zip 产物
-    const toolZip = 'D:/AiSpaces/Work/2026-10-21-21-29-21/_tmp/crx3tool-zip.zip';
-    if (fs.existsSync(toolZip)) fs.copyFileSync(toolZip, zipPath);
+    // zipPath is written directly by writeCRX3 (self-contained zip build);
+    // do NOT copy any cached external zip over it.
     for (const f of [crxPath, zipPath]) {
         console.log('OK', f, fs.existsSync(f) ? fs.statSync(f).size + ' bytes' : 'MISSING');
     }
