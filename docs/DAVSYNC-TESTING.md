@@ -223,3 +223,38 @@ floccus 假定**用户在 UI 里已选好存在的目录**，自身从不 MKCOL�
 
 Turbo（国产 Chromium 内核）+ Floccus + 坚果云全通 —— 再次印证桌面端证书补链无虞。**Turbo 同时也是本 fork MV2 包的合格候选载体**（保留 MV2 的国产内核，见第 5 节建议 1），可作为桌面双端实测的另一端。
 
+## 9. Turbo 154 E2E 实测 —— 2026-10-22 追加（首次真实同步成功 ✅）
+
+### 9.1 载体确认
+
+Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extension` **仍然有效**
+（Google Chrome 155 已移除），扩展加载后默认 DISABLED，通过 `chrome.management.setEnabled(id, true)`
+或 UI 开关启用。启用后 background_page 正常注册。
+
+### 9.2 过程中发现的 3 个 fork 真 bug（全部修复）
+
+| # | bug | 根因 | 修复 |
+|---|---|---|---|
+| 1 | `collectLocalData` 崩溃 `loadUserFilters of undefined` | µb 实例 import 自 `./ublock.js`（仅扩展方法），实例本体在 `./background.js` | import 路径改为 background.js |
+| 2 | 首次同步（2min delay）永不触发 | `alarms.createIfNotPresent`：alarm 持久化于 profile，重启后旧 alarm 永远存在，2min delay 逻辑形同虚设 | 每次启动无条件 `alarms.create` 重置 |
+| 3 | 启动同步在 Turbo 上不触发 | `vAPI.defer.onon` 调度回调静默不执行（Turbo 154 特有；Kiwi 137 正常） | 改用原生 `setTimeout` |
+
+调试手段沉淀：davsync.js 模块内埋 `globalThis.__davsync*` 标志位，CDP evaluate 直接读，
+可精确区分「模块未加载 / config 未就绪 / 定时器未触发 / 同步异常」四类故障。
+
+### 9.3 E2E 闭环验证结果（全部通过 ✅）
+
+1. **首次 push（pushed-init）**：Turbo 本机完整 uBO 数据（设置/过滤列表/动态规则）→ 坚果云
+   `ublock-davsync/ublock-backup.json`，deviceName=turbo-desktop ✅
+2. **变更 → 自动 push**：本地翻转 showIconBadge（true→false）→ 重启 → startupSync 检测
+   fingerprint 变化 → push → 云端 `showIconBadge: false` 与 `lastDirection: push` 双确认 ✅
+3. **lock 文件**：同步期间云端出现 ublock-sync.lock，完成后清除 ✅
+4. **PUT size 验证**：每次 PUT 后 PROPFIND 读回比对（服务器无 getcontentlength 时自动降级信任 2xx）✅
+
+### 9.4 剩余事项
+
+- alarm 周期同步（30min）在 Turbo 上回调不执行的根因未深究——startup sync（每次启动 18s 后）
+  + local-change debounce 已覆盖绝大多数场景；长开浏览器场景待观察。
+- 多端 pull 闭环（第二台设备 apply remote + restart）待第二个载体就绪后验证。
+- Android（Kiwi）端因坚果云证书问题暂无法闭环（7.3 节），可换 WebDAV 服务商复测。
+
