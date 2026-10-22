@@ -60,7 +60,7 @@ Quetta 2.0.8（arm64-v8a，Chromium 148）是少数原生支持扩展的 Android
 
 对照实验：MuMu 自带 Chromium 110（x86_64 原生）渲染进程正常，但其 Trichrome 构建无扩展子系统（APK 内无 `chrome-extension` 字符串，`chrome://extensions` 直接 ERR_INVALID_URL）；向其注入扩展条目虽在 Preferences 存活，但扩展引擎根本不存在，属无效加载。
 
-**结论**：x86_64 模拟器 + ARM 翻译环境跑不了任何带扩展的 Android Chromium 浏览器。Android 端验证需 ARM 真机。
+**结论**：x86_64 模拟器 + ARM 翻译环境跑不了任何带扩展的 Android Chromium 浏览器。~~Android 端验证需 ARM 真机~~（后被第 7 节推翻：Kiwi x86 原生构建即可）。
 
 ### 设计决策：不做 Google Drive 后端
 
