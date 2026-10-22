@@ -13,8 +13,47 @@
 <sub>
 <img src="https://github.com/gorhill/uBlock/blob/master/src/img/ublock.svg" height="38" width="38">
 </sub>
-uBlock Origin (uBO)
+uBlock Origin — DAV-Sync Edition
 </h1>
+
+> **本仓库是 [gorhill/uBlock](https://github.com/gorhill/uBlock) 的私有 fork，不向上游推送。**
+> 上游作者已明确 uBO 不做设置自动同步；本 fork 为自用目的添加了该能力。
+
+## 这个 fork 加了什么：DAV-Sync
+
+uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在本机，换设备/换浏览器要手动导出导入。**DAV-Sync 让任意多个浏览器实例通过任意标准 WebDAV 服务（坚果云、InfiniCLOUD、Nextcloud 等）自动保持 uBO 设置一致**：
+
+- **自动同步**：设置变更后自动推送到 WebDAV，其他设备定时拉取合并，无需人工干预；
+- **跨浏览器**：基于 uBO 官方云存储通道（`vAPI.cloud`）实现，任何能装 uBO 的浏览器都适用，不绑定单一内核；
+- **快照合并**：带设备名标识与数据快照，多端同时修改可合并而非盲目覆盖；
+- **零外部依赖**：直接用扩展自身的 `fetch` 访问 WebDAV，无需本地代理或额外服务端。
+
+### 快速开始
+
+1. 从 `artifacts` 分支 `build/`（或自行按 `ARTIFACTS.md` 重建）获取构建包，解压；
+2. 浏览器扩展管理 → 开发者模式 → 加载已解压的扩展程序（**需仍支持 MV2 的浏览器**——Chrome 137+ 已移除 MV2，推荐百分浏览器 / 360 极速 / Firefox）；
+3. uBO 设置页 → 底部「DAV-Sync」区块 → 填 WebDAV 地址、账号、应用密码、设备名 → 保存；
+4. 其余设备装同款 fork，填**同一个 WebDAV 目录**、不同的设备名即可。
+
+### 关键文件
+
+| 文件 | 作用 |
+|---|---|
+| `src/js/davsync.js` | WebDAV 客户端、自动同步调度、快照生成/应用 |
+| `src/js/dav-cloud.js` | 把 uBO 云存储路由接到 WebDAV |
+| `src/js/settings.js` / `src/settings.html` | 设置页 DAV-Sync 配置 UI |
+| `docs/DAVSYNC-HOST-COMPATIBILITY-AND-SIDELOAD.md` | 载体兼容性验证 + Chrome 侧载方法（持续迭代） |
+| `ARTIFACTS.md` | 产物索引与换机重建指南 |
+
+### 已知限制
+
+- 基于 uBO **1.75.1.16（Manifest V2）**。Chrome 137+ 已禁用 MV2，需选用保留 MV2 的内核；未来计划向 uBOL（MV3）移植，见兼容性文档第 5 节；
+- Android 端未验证（x86 模拟器无法运行带扩展的浏览器，需 ARM 真机）；
+- WebDAV 服务端需支持 MKCOL/PUT/GET（坚果云已验证全通，PUT 前须先建父目录，fork 已内置处理）。
+
+---
+
+## 以下为上游 uBlock Origin 原始说明
 
 | Browser   | Install from ... | Status |
 | :-------: | ---------------- | ------ |
