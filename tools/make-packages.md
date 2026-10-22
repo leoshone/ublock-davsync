@@ -41,6 +41,9 @@ node tools/make-packages.cjs [keyPath]
 manifest.json 的 `key` 字段（RSA 公钥 base64）决定扩展 ID：
 **`odecihgahfphabajblgnmopeibmkhifp`**（全平台一致，多端识别依赖它）。
 
+扩展显示名（2026-10-22 起）：**uBlock Origin DavSync**（short_name 同为完整名，
+不再使用上游的 "development build" 后缀）。
+
 重新生成 key（仅在泄露时需要）：
 
 ```bash

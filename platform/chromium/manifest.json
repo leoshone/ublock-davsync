@@ -107,7 +107,7 @@
     "webRequestBlocking",
     "<all_urls>"
   ],
-  "short_name": "DavSync",
+  "short_name": "uBlock Origin DavSync",
   "storage": {
     "managed_schema": "managed_storage.json"
   },

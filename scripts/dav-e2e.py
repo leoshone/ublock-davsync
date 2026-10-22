@@ -28,6 +28,8 @@
     - crx 正规安装（非 --load-extension）的扩展重启后保持 ENABLED，启动同步自动执行；
     - 多端同时启动时会看到 lastError='locked-by-other-device'——这是 lock 文件
       机制正常工作的证据（另一端持锁时本端拒绝并发同步），下一轮会成功。
+    - 两端都有修改时 lastError='both-changed' 且 state.conflict=true：自动同步
+      暂停，需在设置页手动选 上传/下载（davSyncResolveConflict 消息）。
     - pull 成功会 vAPI.app.restart() → bg 消失 → 需重新启用扩展再读状态
       （Turbo 等浏览器会话级 enabled 会丢；或直接 grep
         <profile>/Default/Local Extension Settings/<id>/ 的 LevelDB 取证）

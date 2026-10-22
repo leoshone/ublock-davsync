@@ -319,7 +319,7 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 
 | 项 | 结果 |
 |---|---|
-| crx 路径作命令行参数传给百分 | ✅ 弹标准「要添加 uBlock Origin development build 吗？」确认框 |
+| crx 路径作命令行参数传给百分 | ✅ 弹标准「要添加 uBlock Origin DavSync 吗？」确认框（更名后） |
 | 开发者模式关闭时 | ❌ `CRX_SIGNATURE_VERIFICATION_FAILED`（InstallVerifier 拒绝未上架商店的自签包） |
 | 开发者模式开启时 | ✅ 安装成功，且**状态持久 ENABLED**（区别于 --load-extension 的会话级 DISABLED） |
 | 扩展 ID | `odecihgahfphabajblgnmopeibmkhifp`（key 派生，全平台一致）✅ |
@@ -405,4 +405,40 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
   ——百分上 crx 分发 + 持久运行 + 自动同步的完整链路成立。
 - alarm 手动触发（chrome.alarms.create 0.2min）在百分与 Turbo 上均不触发回调；
   可靠触发方式 = 重启浏览器走启动同步。
+
+## 13. 功能迭代：错误标识 / 冲突手动处理 / 自定义间隔 / 更名 —— 2026-10-22 深夜
+
+### 13.1 工具栏 badge 错误标识（uBO 未占用 badge，实测可用）
+
+- 红 `!`（#D93025）：硬错误——412 冲突未处理、解析失败、HTTP 4xx、remote-vanished
+- 灰 `↻`（#9AA0A6）：暂时性——`network:`、`HTTP 5xx`、`locked-by-other-device`
+- 成功同步后清除；每个同步出口统一调 `updateBadge()`
+
+### 13.2 冲突改为「停机等用户决策」（替代原 last-writer-wins）
+
+- both-changed（本地 dirty + push 时收到 412）→ **进入 conflict 状态**：
+  自动同步暂停（runSyncOnce 入口短路），badge 红 `!`
+- 进入冲突前把云端旧版本存为 `ublock-backup.conflict-<时间戳>.json`（可找回）
+- 设置页红色横幅：来源设备名 + 时间 + 「用本地覆盖云端（上传）」/「用云端覆盖本地（下载）」
+- 新消息 `davSyncResolveConflict` → `resolveConflict(direction)`；
+  pull 方向 apply 后 restart；push 方向无条件 PUT（用户明确决策，无 If-Match）
+- 下轮自动同步在 conflict 未解除前直接短路返回 `'conflict'`
+
+### 13.3 自定义同步间隔
+
+- `config.syncIntervalMinutes`，5–720 分钟钳位（默认 30）
+- setConfig 接受数字字段；`schedulePeriodicSync()` 无条件重建 alarm 立即生效
+- 设置页 number 输入框（步进 5）
+
+### 13.4 更名「uBlock Origin DavSync」
+
+- platform/chromium + firefox manifest：name/short_name/default_title 统一为完整名
+- `make-chromium-meta.py` 不再追加上游 "development build" 后缀
+- 百分实测：重装确认弹窗显示「要添加"uBlock Origin DavSync"吗?」✅
+
+### 13.5 其他实测补充
+
+- badge API（setBadgeText/Color → getBadgeText 读回）在百分 150 完全可用
+- bg 页里 `vAPI.messaging.send` 不存在（那是 dashboard 侧 API）；bg 内验证需直接调
+  chrome.* API 或内部函数
 
