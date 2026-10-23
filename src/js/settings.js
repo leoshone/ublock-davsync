@@ -371,9 +371,17 @@ vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
 
 dom.on('#davSyncSave', 'click', ( ) => {
     const interval = parseFloat(qs$('#davSyncInterval').value);
+    // 自动启用：用户填了服务器 URL 和用户名并点保存，视为明确的启用意图——
+    // 不勾选启用框就保存会静默存成 disabled，状态行只显示「未启用」，
+    // 看起来像按钮无反应（v1.75.1.101 用户反馈的真实困惑）。
+    let enabled = qs$('#davSyncEnabled').checked;
+    if ( enabled === false && qs$('#davSyncUrl').value.trim() !== '' ) {
+        enabled = true;
+        qs$('#davSyncEnabled').checked = true;
+    }
     const status = vAPI.messaging.send('dashboard', {
         what: 'davSyncSetConfig',
-        enabled: qs$('#davSyncEnabled').checked,
+        enabled,
         url: qs$('#davSyncUrl').value,
         username: qs$('#davSyncUsername').value,
         password: qs$('#davSyncPassword').value,
@@ -388,6 +396,11 @@ dom.on('#davSyncSave', 'click', ( ) => {
 });
 
 dom.on('#davSyncNow', 'click', ( ) => {
+    // 未启用时先给出可操作的提示，而不是静默无反应
+    if ( qs$('#davSyncEnabled').checked === false ) {
+        dom.text('#davSyncStatus', '请先填写服务器信息并点「保存」启用后再同步');
+        return;
+    }
     dom.text('#davSyncStatus', '同步中…');
     vAPI.messaging.send('dashboard', { what: 'davSyncNow' }).then(result => {
         if ( result instanceof Object ) { refreshDavStatus(result); }
