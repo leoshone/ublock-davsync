@@ -442,3 +442,28 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 - bg 页里 `vAPI.messaging.send` 不存在（那是 dashboard 侧 API）；bg 内验证需直接调
   chrome.* API 或内部函数
 
+## 14. v1.75.1.102 —— 小屏适配与启动延迟调整 —— 2026-10-23
+
+### 14.1 变更
+
+- 启动同步延迟 18 s → **30 s**（慢速设备过滤引擎初始化更从容，原 18 s 为经验值无特殊依据）
+- 设置页 WebDAV 输入框改为自适应：`min-width:0; max-width:36em`（原 `min-width:20em`
+  在小米 13 等窄屏上超出屏幕右边界）
+- 版本号进入 `.102` 迭代（版本策略见 ARTIFACTS.md）
+
+### 14.2 Android 端同步链路首次全通（MuMu + Kiwi + 网络中转）
+
+- Kiwi 数据被清后用 root 注入法重装 v1.75.1.101/102 成功（adb root 重开会重置，需重新执行）
+- 在可直连坚果云的网络环境下完整 E2E 通过：
+  - `PROPFIND 207` ✅
+  - 启动同步 `lastDirection=pull`（首轮撞 `locked-by-other-device`，次轮成功）✅
+  - 升级 102 后启动同步 `lastDirection=push` ✅
+- 第 7.3 节记录的握手失败仅在特定 Android 网络环境下出现（换网络/系统代理即可解决），
+  不构成通用性阻断——对外文档已改为中性表述。
+
+### 14.3 自动发版闭环验证
+
+- Release publish → davsync-update-feed.yml 自动重写 docs/update.xml ✅（无需手工）
+- 上游 main.yml 已禁用自动构建（其产物无 key/update_url，见 main.yml 内注释），
+  发版后不再产生需手删的原版资产。
+

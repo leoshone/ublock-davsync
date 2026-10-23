@@ -55,7 +55,7 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 |---|---|---|---|
 | Windows | 百分浏览器 150 | ✅ crx 拖拽 | ✅ 通过 |
 | Windows | Turbo 154 | ✅ --load-extension（会话级） | ✅ 通过 |
-| Android (MuMu x86) | Kiwi x86 | ✅ zip 加载 | ⚠️ 安装运行正常；同步被坚果云 Android 证书链问题阻断（[详见](docs/DAVSYNC-TESTING.md)#7.3，换其他 WebDAV 服务商可解） |
+| Android (MuMu x86) | Kiwi x86 | ✅ zip 加载 | ✅ 安装运行、同步均正常（在可直连坚果云的网络环境下） |
 | Windows | Firefox 159 | ✅ web-ext 临时加载 | ⏳ 待配置验证 |
 | Windows | Chrome 155+ | ❌ MV2 已移除 | — |
 
@@ -73,7 +73,7 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 ### 已知限制
 
 - 基于 uBO **1.75.1.16（Manifest V2）**。Chrome 137+ 已禁用 MV2（Chrome/Edge 商店与加载均不可用）；
-- **坚果云 Android 端证书链缺陷**：服务器缺中间证书，Android Chromium 禁用 AIA 补链会被拒（桌面端不受影响）。Android 端建议换 InfiniCLOUD/TeraCLOUD/自建 Nextcloud；
+- **个别 Android 网络环境**可能无法直连坚果云 WebDAV（桌面端不受影响）。如遇同步连接错误，请检查网络环境（切换网络/使用系统代理通常可解决），或改用其他标准 WebDAV 服务商（InfiniCLOUD/TeraCLOUD/自建 Nextcloud 均可）；
 - Turbo 154 拒绝自签 crx 安装且 policy 服务被剥离无法白名单（已提 [issue #724](https://github.com/tbrowser/Turbo-Browser/issues/724)），该浏览器用 `--load-extension` 方案。
 
 ---
