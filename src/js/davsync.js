@@ -93,37 +93,6 @@ const updateBadge = function() {
     badgeSet(errorSeverity(syncState.lastError));
 };
 
-// Friendly Chinese messages for the settings pane, derived from lastError /
-// conflict state. Kept in one place so the pane and badge stay in sync.
-const humanizeError = function(err) {
-    if ( typeof err !== 'string' || err === '' ) { return ''; }
-    if ( err.startsWith('network:') ) {
-        return '无法连接服务器，请检查网络或服务器 URL';
-    }
-    if ( err.startsWith('HTTP 5') ) {
-        return `服务器繁忙（${err}），稍后将自动重试`;
-    }
-    if ( err.startsWith('HTTP 4') ) {
-        return `服务器拒绝了请求（${err}），请检查账号与密码`;
-    }
-    if ( err.startsWith('redirect') ) {
-        return '服务器返回了重定向，请确认 URL 指向 WebDAV 根目录';
-    }
-    if ( err === 'locked-by-other-device' ) {
-        return '另一台设备正在同步，本轮已跳过（稍后自动重试）';
-    }
-    if ( err === 'remote-parse-failed' ) {
-        return '云端数据格式异常，请检查该 WebDAV 文件是否被其他程序修改';
-    }
-    if ( err === 'upload size mismatch' || err.includes('upload size mismatch') ) {
-        return '上传后校验不一致，已重试仍失败，请稍后重试';
-    }
-    if ( err === 'remote-vanished' ) {
-        return '云端文件在同步过程中消失，下一轮将重新上传';
-    }
-    return err;   // unknown: show as-is
-};
-
 /******************************************************************************/
 // WebDAV client (fetch-based; Basic Auth only -- Jianguoyun/Nutstore,
 // Nextcloud, Apache/Nginx DAV all work with this).
@@ -739,7 +708,6 @@ const davSync = {
             syncIntervalMinutes: config.syncIntervalMinutes,
             lastSyncTime: syncState.lastSyncTime,
             lastError: err,
-            lastErrorHuman: humanizeError(err),
             errorSeverity: syncState.conflict === true
                 ? 'error' : errorSeverity(syncState.lastError),
             lastDirection: syncState.lastDirection,

@@ -326,11 +326,67 @@ dom.on(
 /******************************************************************************/
 // WebDAV auto-sync configuration pane (DAV-Sync fork)
 
+const davSyncFields = [
+    '#davSyncUrl',
+    '#davSyncUsername',
+    '#davSyncPassword',
+    '#davSyncDeviceName',
+    '#davSyncInterval',
+];
+
+// 当前已保存的配置快照：用于判断表单是否有未保存的变更。
+let davSyncSaved = {
+    url: '',
+    username: '',
+    password: '',
+    deviceName: '',
+    syncIntervalMinutes: 30,
+};
+
+const davSyncReadForm = function() {
+    const interval = parseFloat(qs$('#davSyncInterval').value);
+    return {
+        url: qs$('#davSyncUrl').value.trim(),
+        username: qs$('#davSyncUsername').value.trim(),
+        password: qs$('#davSyncPassword').value,
+        deviceName: qs$('#davSyncDeviceName').value.trim(),
+        syncIntervalMinutes: isNaN(interval) ? 30 : interval,
+    };
+};
+
+// 配置是否完整（启用同步所需的最低要求）
+const davSyncConfigComplete = function(cfg) {
+    return cfg.url !== '' && cfg.username !== '';
+};
+
+// 表单相对已保存快照是否有变化
+const davSyncFormChanged = function(cfg) {
+    return cfg.url !== davSyncSaved.url
+        || cfg.username !== davSyncSaved.username
+        || cfg.password !== davSyncSaved.password
+        || cfg.deviceName !== davSyncSaved.deviceName
+        || cfg.syncIntervalMinutes !== davSyncSaved.syncIntervalMinutes;
+};
+
+// 依据启用状态与表单状态刷新：字段可用性、保存/同步按钮可用性
+const davSyncUpdateUI = function() {
+    const enabled = qs$('#davSyncEnabled').checked;
+    const cfg = davSyncReadForm();
+    for ( const sel of davSyncFields ) {
+        qs$(sel).disabled = enabled === false;
+    }
+    // 保存按钮：有变化才可点（参考「应用更改」按钮的行为）
+    qs$('#davSyncSave').disabled = davSyncFormChanged(cfg) === false;
+    // 立即同步：配置完整且已保存（无未保存变更）才可点
+    qs$('#davSyncNow').disabled =
+        davSyncConfigComplete(cfg) === false || davSyncFormChanged(cfg) === true;
+};
+
 const davStatusText = status => {
     if ( status.enabled !== true ) { return '未启用'; }
     if ( status.conflict === true ) { return '冲突：自动同步已暂停，请选择「上传」或「下载」'; }
     if ( status.lastError ) {
-        return `错误：${status.lastErrorHuman || status.lastError}`;
+        return `错误：${status.lastError}`;
     }
     if ( status.lastSyncTime === 0 ) { return '尚未同步'; }
     const t = new Date(status.lastSyncTime).toLocaleString();
@@ -344,12 +400,23 @@ const davStatusText = status => {
 
 const refreshDavStatus = function(status) {
     qs$('#davSyncEnabled').checked = status.enabled === true;
-    if ( status.url ) { qs$('#davSyncUrl').value = status.url; }
-    if ( status.username ) { qs$('#davSyncUsername').value = status.username; }
-    if ( status.deviceName ) { qs$('#davSyncDeviceName').value = status.deviceName; }
+    qs$('#davSyncUrl').value = status.url || '';
+    qs$('#davSyncUsername').value = status.username || '';
+    // 密码不回填（服务端不下发），保持输入框为空
+    qs$('#davSyncDeviceName').value = status.deviceName || '';
     if ( typeof status.syncIntervalMinutes === 'number' ) {
         qs$('#davSyncInterval').value = status.syncIntervalMinutes;
     }
+    // 记录已保存快照（密码以当前输入框为准：服务端不下发真实密码，
+    // 若用户未输入新密码则视为未变更）
+    davSyncSaved = {
+        url: status.url || '',
+        username: status.username || '',
+        password: qs$('#davSyncPassword').value,
+        deviceName: status.deviceName || '',
+        syncIntervalMinutes: typeof status.syncIntervalMinutes === 'number'
+            ? status.syncIntervalMinutes : 30,
+    };
     // Conflict banner: show row + details, or hide it when resolved.
     const row = qs$('#davSyncConflictRow');
     if ( status.conflict === true ) {
@@ -363,44 +430,39 @@ const refreshDavStatus = function(status) {
         row.style.display = 'none';
     }
     dom.text('#davSyncStatus', davStatusText(status));
+    davSyncUpdateUI();
 };
 
 vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
     if ( status instanceof Object ) { refreshDavStatus(status); }
 });
 
+for ( const sel of [ '#davSyncEnabled', ...davSyncFields ] ) {
+    dom.on(sel, 'input', ( ) => { davSyncUpdateUI(); });
+    dom.on(sel, 'change', ( ) => { davSyncUpdateUI(); });
+}
+
 dom.on('#davSyncSave', 'click', ( ) => {
-    const interval = parseFloat(qs$('#davSyncInterval').value);
-    // 自动启用：用户填了服务器 URL 和用户名并点保存，视为明确的启用意图——
-    // 不勾选启用框就保存会静默存成 disabled，状态行只显示「未启用」，
-    // 看起来像按钮无反应（v1.75.1.101 用户反馈的真实困惑）。
-    let enabled = qs$('#davSyncEnabled').checked;
-    if ( enabled === false && qs$('#davSyncUrl').value.trim() !== '' ) {
-        enabled = true;
-        qs$('#davSyncEnabled').checked = true;
-    }
+    const cfg = davSyncReadForm();
     const status = vAPI.messaging.send('dashboard', {
         what: 'davSyncSetConfig',
-        enabled,
-        url: qs$('#davSyncUrl').value,
-        username: qs$('#davSyncUsername').value,
-        password: qs$('#davSyncPassword').value,
-        deviceName: qs$('#davSyncDeviceName').value,
-        syncIntervalMinutes: isNaN(interval) ? undefined : interval,
+        enabled: qs$('#davSyncEnabled').checked,
+        url: cfg.url,
+        username: cfg.username,
+        password: cfg.password,
+        deviceName: cfg.deviceName,
+        syncIntervalMinutes: cfg.syncIntervalMinutes,
     }).then(result => {
         if ( result instanceof Object ) {
             refreshDavStatus(result);
             qs$('#davSyncPassword').value = '';
+            davSyncSaved.password = '';
+            davSyncUpdateUI();
         }
     });
 });
 
 dom.on('#davSyncNow', 'click', ( ) => {
-    // 未启用时先给出可操作的提示，而不是静默无反应
-    if ( qs$('#davSyncEnabled').checked === false ) {
-        dom.text('#davSyncStatus', '请先填写服务器信息并点「保存」启用后再同步');
-        return;
-    }
     dom.text('#davSyncStatus', '同步中…');
     vAPI.messaging.send('dashboard', { what: 'davSyncNow' }).then(result => {
         if ( result instanceof Object ) { refreshDavStatus(result); }
