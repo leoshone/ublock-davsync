@@ -70,10 +70,10 @@
 <div id="davSync" class="fieldset">
     <div class="fieldset-header">WebDAV 自动同步</div>
     <div class="li"><label><span class="input checkbox"><input type="checkbox" id="davSyncEnabled"><svg viewBox="0 0 24 24"><path d="M1.73,12.91 8.1,19.28 22.79,4.59"/></svg></span><span>启用 WebDAV 自动同步（跨浏览器：Chrome / Kiwi / 百分 等）</span></label></div>
-    <div class="li"><label><span style="display:inline-block;min-width:9em;">服务器 URL</span><input type="url" id="davSyncUrl" placeholder="https://dav.jianguoyun.com/dav/" style="flex:1;min-width:20em;"></label></div>
-    <div class="li"><label><span style="display:inline-block;min-width:9em;">用户名</span><input type="text" id="davSyncUsername" autocomplete="off" style="flex:1;min-width:20em;"></label></div>
-    <div class="li"><label><span style="display:inline-block;min-width:9em;">密码（应用密码）</span><input type="password" id="davSyncPassword" autocomplete="off" style="flex:1;min-width:20em;"></label></div>
-    <div class="li"><label><span style="display:inline-block;min-width:9em;">设备名称</span><input type="text" id="davSyncDeviceName" placeholder="留空则使用平台名" style="flex:1;min-width:20em;"></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">服务器 URL</span><input type="url" id="davSyncUrl" placeholder="https://dav.jianguoyun.com/dav/" style="flex:1;min-width:0;width:100%;max-width:36em;box-sizing:border-box;"></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">用户名</span><input type="text" id="davSyncUsername" autocomplete="off" style="flex:1;min-width:0;width:100%;max-width:36em;box-sizing:border-box;"></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">密码（应用密码）</span><input type="password" id="davSyncPassword" autocomplete="off" style="flex:1;min-width:0;width:100%;max-width:36em;box-sizing:border-box;"></label></div>
+    <div class="li"><label><span style="display:inline-block;min-width:9em;">设备名称</span><input type="text" id="davSyncDeviceName" placeholder="留空则使用平台名" style="flex:1;min-width:0;width:100%;max-width:36em;box-sizing:border-box;"></label></div>
     <div class="li"><label><span style="display:inline-block;min-width:9em;">同步间隔（分钟）</span><input type="number" id="davSyncInterval" min="5" max="720" step="5" value="30" style="width:8em;" title="范围 5–720 分钟"><span id="davSyncIntervalHint" style="margin-left:1em;color:#888;">5–720 分钟，默认 30</span></label></div>
     <div class="li" id="davSyncConflictRow" style="display:none;background:#FDECEA;border:1px solid #F5B7B1;padding:0.6em 0.8em;border-radius:4px;">
         <div style="margin-bottom:0.5em;"><strong id="davSyncConflictMsg" style="color:#B03A2E;">检测到两端都有修改，自动同步已暂停</strong></div>

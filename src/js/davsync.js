@@ -48,7 +48,7 @@ const SYNC_PERIOD_MIN = 30;          // default periodic sync interval (minutes)
 const SYNC_PERIOD_MIN_MIN = 5;       // user-configurable bounds
 const SYNC_PERIOD_MIN_MAX = 720;
 const SYNC_INITIAL_DELAY_MIN = 2;    // first sync 2 min after launch
-const STARTUP_SYNC_DELAY_MS = 18000; // startup sync ~18 s after launch
+const STARTUP_SYNC_DELAY_MS = 30000; // startup sync ~30 s after launch (let filter engines fully init on slow devices)
 
 /******************************************************************************/
 // Toolbar badge: error indicator for the DAV-Sync subsystem. uBO itself does
