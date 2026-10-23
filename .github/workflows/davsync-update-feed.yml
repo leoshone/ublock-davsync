@@ -7,6 +7,7 @@ name: DavSync update feed
 on:
   release:
     types: [published]
+  workflow_dispatch:   # 允许手动触发（用于修复/补发 update feed）
 
 permissions:
   contents: write
