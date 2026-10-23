@@ -335,10 +335,13 @@ const davSyncFields = [
 ];
 
 // 当前已保存的配置快照：用于判断表单是否有未保存的变更。
+// password 保存密码框是否处于「已填但未保存」状态：密码不入库不下发，
+// 保存后输入框保留用户输入，仅当用户再次修改时才算有变更。
 let davSyncSaved = {
     url: '',
     username: '',
     password: '',
+    passwordDirty: false,
     deviceName: '',
     syncIntervalMinutes: 30,
 };
@@ -363,7 +366,7 @@ const davSyncConfigComplete = function(cfg) {
 const davSyncFormChanged = function(cfg) {
     return cfg.url !== davSyncSaved.url
         || cfg.username !== davSyncSaved.username
-        || cfg.password !== davSyncSaved.password
+        || davSyncSaved.passwordDirty
         || cfg.deviceName !== davSyncSaved.deviceName
         || cfg.syncIntervalMinutes !== davSyncSaved.syncIntervalMinutes;
 };
@@ -407,12 +410,13 @@ const refreshDavStatus = function(status) {
     if ( typeof status.syncIntervalMinutes === 'number' ) {
         qs$('#davSyncInterval').value = status.syncIntervalMinutes;
     }
-    // 记录已保存快照（密码以当前输入框为准：服务端不下发真实密码，
-    // 若用户未输入新密码则视为未变更）
+    // 记录已保存快照（密码不入库不下发：输入框保留用户输入，
+    // 仅当用户再次修改时才算有变更）
     davSyncSaved = {
         url: status.url || '',
         username: status.username || '',
-        password: qs$('#davSyncPassword').value,
+        password: '',
+        passwordDirty: false,
         deviceName: status.deviceName || '',
         syncIntervalMinutes: typeof status.syncIntervalMinutes === 'number'
             ? status.syncIntervalMinutes : 30,
@@ -438,7 +442,10 @@ vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
 });
 
 for ( const sel of [ '#davSyncEnabled', ...davSyncFields ] ) {
-    dom.on(sel, 'input', ( ) => { davSyncUpdateUI(); });
+    dom.on(sel, 'input', ( ) => {
+        if ( sel === '#davSyncPassword' ) { davSyncSaved.passwordDirty = true; }
+        davSyncUpdateUI();
+    });
     dom.on(sel, 'change', ( ) => { davSyncUpdateUI(); });
 }
 
@@ -455,8 +462,8 @@ dom.on('#davSyncSave', 'click', ( ) => {
     }).then(result => {
         if ( result instanceof Object ) {
             refreshDavStatus(result);
-            qs$('#davSyncPassword').value = '';
-            davSyncSaved.password = '';
+            // 密码框保留用户输入（服务端不下发密码，清空会让用户误以为没保存）
+            davSyncSaved.passwordDirty = false;
             davSyncUpdateUI();
         }
     });
