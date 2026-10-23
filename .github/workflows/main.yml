@@ -1,8 +1,11 @@
 name: uBO release
 
+# DavSync fork：上游的自动构建已禁用——它产出的包 manifest 无 key 字段
+# （扩展 ID 随机、无 update_url），与我们的固定 ID / 自动更新策略冲突。
+# 正式发版走 tools/make-packages.cjs（本地签名打包）+ davsync-update-feed.yml。
+# 如需在 CI 重建，可手动触发本 workflow（workflow_dispatch）。
 on:
-  create:
-    branches: master
+  workflow_dispatch:
 
 permissions:
   contents: read
