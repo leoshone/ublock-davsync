@@ -44,6 +44,9 @@ manifest.json 的 `key` 字段（RSA 公钥 base64）决定扩展 ID：
 扩展显示名（2026-10-22 起）：**uBlock Origin DavSync**（short_name 同为完整名，
 不再使用上游的 "development build" 后缀）。
 
+⚠️ 版本号策略：永远 fork 上游**正式 release**（不跟 beta）；版本号 = `<上游版本>.<100+迭代号>`，
+如 `1.75.0.101`。详见 ARTIFACTS.md「版本策略」。
+
 重新生成 key（仅在泄露时需要）：
 
 ```bash

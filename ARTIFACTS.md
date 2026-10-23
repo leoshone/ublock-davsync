@@ -4,6 +4,19 @@
 > 换电脑恢复：`git clone https://github.com/leoshone/ublock-davsync` 后按「重建命令」一节操作即可。
 > 工作区副本与仓库副本（`ublock-davsync/ARTIFACTS.md`）内容一致，更新时同步改两处。
 
+## ⚠️ 版本策略（重要原则）
+
+1. **永远 fork 上游正式 release，不跟 beta**（beta = gorhill 的滚动开发版，正式版才经完整验证且与商店版本对照一致）。
+2. **版本号 = `<上游版本>.<100 + DavSync 迭代号>`**：
+   - 例：`1.75.0.101` = 基于上游 1.75.0 正式版的第 1 次 DavSync 迭代；
+   - 上游出新正式版（如 1.76.0）→ rebase 上游新 tag，第 4 段重新从 101 计数；
+   - 上游 beta（1.75.1b17 等）**忽略**——beta 序列（x.y.1.z）与我们的序列（x.y.0.1xx）第 3 段即不同，绝无撞车；
+3. Chromium manifest version 最多 4 段、每段 ≤65535，禁止 5 段；
+4. 每次发版：`dist/version` 改新版本号 → `make-chromium-meta.py` → `make-packages.cjs` → Release（资产名 `uBlock0.davsync_v<版本>.<平台>.*`）→ GitHub Actions 自动更新 docs/update.xml。
+
+历史注记：首个 DavSync 版本曾基于上游 1.75.1b16 开发线（commit 1e6f82b，2026-10-20），
+自 v1.75.0.101 起基线语义对齐上游正式版。
+
 ## 仓库布局（github.com/leoshone/ublock-davsync，私有）
 
 | 分支/页 | 内容 |
