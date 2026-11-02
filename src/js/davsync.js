@@ -469,10 +469,13 @@ const parkConflict = async function(remote) {
 // Core sync algorithm. Returns a short human-readable status string.
 
 const runSyncOnce = async function( ) {
+    // Load persisted state first: `config` starts as a copy of the defaults
+    // (enabled=false), so checking it before configReady resolves would skip
+    // the very first sync after a cold start.
+    await Promise.all([ configReady, stateReady ]);
+
     if ( config.enabled !== true ) { return 'disabled'; }
     if ( config.url === '' ) { return 'no-url'; }
-
-    await Promise.all([ configReady, stateReady ]);
 
     // 0a. An unresolved conflict blocks automatic sync: the user must pick
     // 上传/下载 in the settings pane (davSyncForceUpload/davSyncForceDownload).
@@ -651,9 +654,13 @@ const runSyncOnceLocked = async function( ) {
             await applyRemoteData(remoteData);
         } catch ( reason ) {
             // Half-applied restore: report it instead of claiming success.
+            // The engines must still reload -- storage is already partly
+            // rewritten, so running on stale in-memory data risks writing it
+            // back over the new state on the next save.
             syncState.lastError = String(reason && reason.message || reason);
             saveSyncState();
             updateBadge();
+            deferRestart();
             return syncState.lastError;
         }
         const localNow = await collectLocalData();
@@ -877,6 +884,11 @@ const davSync = {
         await configReady;
         for ( const key of [ 'url', 'username', 'password', 'filePath', 'deviceName' ] ) {
             if ( typeof details[key] === 'string' ) {
+                // An empty password means "unchanged", not "clear it": the
+                // settings pane never receives the stored password (it is not
+                // sent to the UI), so saving any other field used to wipe it
+                // and break every later sync with 401.
+                if ( key === 'password' && details.password === '' ) { continue; }
                 config[key] = details[key].trim();
             }
         }

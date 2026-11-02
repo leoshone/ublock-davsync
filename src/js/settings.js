@@ -509,15 +509,20 @@ for ( const sel of [ '#davSyncEnabled', ...davSyncFields ] ) {
 
 dom.on('#davSyncSave', 'click', ( ) => {
     const cfg = davSyncReadForm();
-    vAPI.messaging.send('dashboard', {
+    const payload = {
         what: 'davSyncSetConfig',
         enabled: qs$('#davSyncEnabled').checked,
         url: cfg.url,
         username: cfg.username,
-        password: cfg.password,
         deviceName: cfg.deviceName,
         syncIntervalMinutes: cfg.syncIntervalMinutes,
-    }).then(result => {
+    };
+    // 只在用户这次确实改过密码时才发送：设置页不回填密码，若无条件发送空串，
+    // 改个设备名就会把已保存的密码清掉。
+    if ( davSyncSaved.passwordDirty ) {
+        payload.password = cfg.password;
+    }
+    vAPI.messaging.send('dashboard', payload).then(result => {
         if ( result instanceof Object ) {
             refreshDavStatus(result);
             // 密码框保留用户输入（服务端不下发密码，清空会让用户误以为没保存）
