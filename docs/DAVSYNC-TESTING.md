@@ -14,9 +14,10 @@
 > 产物：`dist/build/uBlock0.davsync_v1.75.1.16.chromium.zip` 及解包目录
 > 环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
 
-## 限制：Quetta 无法在 MuMu 上测试（2026-11-02 定论）
+## 限制：Quetta 在 MuMu 模拟器上跑不起来（真机正常）
 
-**结论：Quetta 不能作为本轮 Android 端测试载体，Android 端一律用 Kiwi（x86）代测。**
+**先澄清适用范围：Quetta 本身没问题，arm64 真机上正常可用。下面只说「MuMu 模拟器」这个组合不成立。**
+Android 端的自动化测试因此改用 Kiwi（x86），Quetta 需要在真机上人工验证。
 
 - Quetta（`net.quetta.browser`）只发 **arm64-v8a** 包；MuMu 是 x86_64，`primaryCpuAbi=arm64-v8a`
   意味着它经 **houdini**（日志里 `Intel Bridge Technology for NetEase Mumu`）翻译执行。
@@ -25,13 +26,13 @@
   随后每 10–30 秒重启一次、再死一次 → 用户看到「喔唷，崩溃啦！」。
 - 根因是 Chromium 渲染进程要在自己身上装 seccomp-bpf 系统调用白名单
   （`prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)`），而翻译层自身会发一些正常 ARM 程序不会发的
-  syscall，被过滤器拒绝后内核直接投递 SIGSYS。**与网页内容、与扩展都无关**。
+  syscall，被过滤器拒绝后内核直接投递 SIGSYS。**与网页内容、与扩展都无关**，是「arm64 应用跑在 x86 模拟器上」的形态问题。
 - 对照：同一页面用 Kiwi（`primaryCpuAbi=x86`，原生执行）打开，渲染进程稳定存活、零 SIGSYS。
 - 绕过尝试均无效：`--disable-seccomp-filter-sandbox` / `--no-sandbox` 写入
   `/data/data/net.quetta.browser/files/chrome-command-line` 与 `/data/local/tmp/chrome-command-line`
   后重启，仍然 15 次 SIGSYS（非调试构建不读该文件）。
-- 因此 Quetta 侧只能验证到「扩展后台进程在跑」，**配置界面与同步流程均无法验证**。
-  想真正测 Quetta 需要 arm64 真机或支持 arm64 原生执行的环境。
+- 因此在 MuMu 里 Quetta 只能验证到「扩展后台进程在跑」，**配置界面与同步流程都无法验证**。
+  要测 Quetta 请用 arm64 真机（正常环境），行为与桌面端一致。
 
 ## 总结论（2026-10-22 更新）
 
@@ -42,7 +43,7 @@
 | 桌面 Turbo 154 | ✅ **E2E 通过** | `--load-extension` 有效；会话内 setEnabled 启用；详见第 9 节 |
 | 桌面百分 150 | ✅ **E2E 通过** | Preferences 预写持久启用；详见第 10 节 |
 | 桌面 Chrome 155 | ❌ 无法加载 | Chrome 137+ 移除 MV2（早期记录，第 1 节） |
-| MuMu Quetta 2.0.8（arm64） | ⚠️ SIGSYS 全灭 | houdini 翻译问题；**换 Kiwi x86 即解**（第 2/7 节） |
+| MuMu Quetta 2.0.8（arm64） | ⚠️ SIGSYS 全灭（**仅 MuMu**） | houdini 翻译问题；真机正常可用，模拟器上**换 Kiwi x86 即解**（第 2/7 节） |
 | MuMu Chromium 110 | ❌ 无扩展子系统 | Trichrome 构建（第 2 节） |
 | MuMu Kiwi x86 | ⚠️ 扩展运行 ✅ / 同步被证书阻断 | 同步受坚果云 Android 证书链问题阻（第 7 节） |
 | 坚果云 WebDAV | ✅ 桌面全通 | Android 端证书链缺陷（7.3 节），桌面无影响 |
@@ -69,7 +70,9 @@
 1. 换仍保留 MV2 支持的 Chromium 内核浏览器（百分浏览器、360 极速浏览器等国产内核通常自带 MV2 白名单）；
 2. 将 fork 的同步模块移植到 uBOL（官方 MV3 版）——见第 5 节。
 
-## 2. MuMu 模拟器 + Quetta —— 扩展引擎存在但渲染进程全灭（环境不兼容）
+## 2. MuMu 模拟器 + Quetta —— 扩展引擎存在但渲染进程全灭（仅限模拟器；真机正常）
+
+> 适用范围提醒：Quetta 在 arm64 真机上正常工作，本节只描述它在 **MuMu（x86_64 + houdini）** 下的失败。
 
 Quetta 2.0.8（arm64-v8a，Chromium 148）是少数原生支持扩展的 Android 浏览器，测试进展：
 

@@ -56,7 +56,8 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 | Windows | 百分浏览器 150 | ✅ crx 拖拽 / 解包加载 | ✅ 通过（v1.75.1.108 界面与同步全量回归 13/13） |
 | Windows | Turbo 154 | ✅ crx 安装 / --load-extension（会话级） | ✅ 通过 |
 | Android (MuMu x86) | Kiwi x86 | ✅ zip 加载 | ✅ 安装运行、同步均正常（在可直连坚果云的网络环境下） |
-| Android (MuMu x86) | **Quetta（arm64）** | ❌ **无法使用** | ❌ **不可测**：Quetta 只有 arm64 包，在 x86_64 模拟器上经 houdini 翻译执行，Chromium 渲染进程装 seccomp 过滤器时被内核 SIGSYS 秒杀，**任何页面都打不开**（详见 [载体文档](docs/DAVSYNC-TESTING.md#限制quetta-无法在-mumu-上测试)） |
+| Android 真机 (arm64) | Quetta | ✅ zip 加载 | ✅ 正常可用（真机 arm64 原生执行；由使用者确认，本仓库未做真机实测） |
+| Android 模拟器 (MuMu x86) | Quetta（arm64 包） | ⚠️ 装了也用不了 | ⚠️ **仅模拟器受限**：MuMu 是 x86_64，Quetta 只有 arm64 包，经 houdini 翻译执行时渲染进程被内核 SIGSYS 秒杀，页面打不开（详见 [载体文档](docs/DAVSYNC-TESTING.md#限制quetta-在-mumu-模拟器上跑不起来真机正常)） |
 | Windows | Firefox 159 | ✅ web-ext 临时加载 | ⏳ 待配置验证 |
 | Windows | Chrome 155+ | ❌ MV2 已移除 | — |
 
