@@ -88,6 +88,29 @@ const errorSeverity = function(err) {
     return 'error';                                            // everything else
 };
 
+/******************************************************************************/
+// Restart scheduling.
+//
+// A pull has to reload the extension so every engine rebuilds from the freshly
+// applied data. Doing that *inside* the message handler used to tear down the
+// sender before the reply was delivered: the settings pane sat on 「同步中…」
+// forever, even though the sync had already finished, and every later click
+// failed with a dead messaging port. Answer first, reload on the next tick.
+
+let restartTimer = 0;
+
+const deferRestart = function( ) {
+    if ( restartTimer !== 0 ) { return; }
+    restartTimer = setTimeout(( ) => {
+        restartTimer = 0;
+        vAPI.app.restart();
+    }, 600);
+};
+
+const isRestartPending = function( ) {
+    return restartTimer !== 0;
+};
+
 const updateBadge = function() {
     // conflict state takes precedence over plain errors
     if ( syncState.conflict === true ) {
@@ -624,7 +647,15 @@ const runSyncOnceLocked = async function( ) {
     //    (Safe: local was NOT dirty, or this device has never synced and
     //    carries nothing worth protecting, so nothing of ours is lost.)
     if ( remoteSameAsLocal === false && (localDirty === false || neverSynced) ) {
-        await applyRemoteData(remoteData);
+        try {
+            await applyRemoteData(remoteData);
+        } catch ( reason ) {
+            // Half-applied restore: report it instead of claiming success.
+            syncState.lastError = String(reason && reason.message || reason);
+            saveSyncState();
+            updateBadge();
+            return syncState.lastError;
+        }
         const localNow = await collectLocalData();
         syncState.lastEtag = remote.etag || '';
         syncState.lastLocalFingerprint = fingerprintLocalData(localNow);
@@ -670,17 +701,32 @@ const applyRemoteData = async function(data) {
     }
 
     // Flush caches + wipe local storage, mirroring restoreUserData().
+    //
+    // IMPORTANT: vAPI.storage.clear() also wipes our own davSyncConfig and
+    // davSyncState, so they must be written back *immediately* and before any
+    // step that can throw. On Android (Kiwi) a throwing step here used to
+    // leave the extension with no config at all -- the sync silently stopped
+    // running and the settings pane showed an empty form.
     io.rmrf();
     await Promise.all([
         cacheStorage.clear(),
         vAPI.storage.clear(),
     ]);
-
-    µb.saveLocalSettings();
-
-    // Careful: vAPI.storage.clear() wiped our own config/state. Rewrite them.
     await saveConfig();
     await saveSyncState();
+
+    // Every remaining step is best-effort: collect the first failure instead
+    // of aborting the restore halfway and leaving a half-wiped profile.
+    const failures = [];
+    const attempt = async function(label, fn) {
+        try {
+            await fn();
+        } catch ( reason ) {
+            failures.push(`${label}: ${reason && reason.message || reason}`);
+        }
+    };
+
+    await attempt('local-settings', ( ) => µb.saveLocalSettings());
 
     // Whitelist may be array or string depending on producer version.
     let whitelist = data.whitelist;
@@ -706,27 +752,33 @@ const applyRemoteData = async function(data) {
         }
     }
 
-    vAPI.storage.set(Object.assign({}, data.userSettings || {}, {
+    await attempt('user-settings', ( ) => vAPI.storage.set(Object.assign({}, data.userSettings || {}, {
         hiddenSettings,
         netWhitelist: whitelist || [],
         dynamicFilteringString: data.dynamicFilteringString || '',
         urlFilteringString: data.urlFilteringString || '',
         hostnameSwitchesString: data.hostnameSwitchesString || '',
-    }));
+    })));
 
     const userFilters = Array.isArray(data.userFilters)
         ? data.userFilters.join('\n')
         : data.userFilters;
-    await µb.saveUserFilters(userFilters || '');
+    await attempt('user-filters', ( ) => µb.saveUserFilters(userFilters || ''));
 
     if ( Array.isArray(data.selectedFilterLists) ) {
-        await µb.saveSelectedFilterLists(data.selectedFilterLists);
+        await attempt('filter-lists', ( ) => µb.saveSelectedFilterLists(data.selectedFilterLists));
     }
 
     // Keep the filtering-context import referenced so bundlers/linters do
     // not complain; it also documents the dependency on engine modules
     // being reloadable (vAPI.app.restart performs the actual reload).
     void FilteringContext;
+
+    // Surface partial failures instead of reporting a clean 'pulled': the
+    // caller turns this into lastError so the user sees something is wrong.
+    if ( failures.length !== 0 ) {
+        throw new Error(`apply-partial (${failures.join(' | ')})`);
+    }
 };
 
 /******************************************************************************/
@@ -815,6 +867,9 @@ const davSync = {
             lastDirection: syncState.lastDirection,
             conflict: syncState.conflict === true,
             conflictRemoteMeta: syncState.conflictRemoteMeta,
+            // True while a pull-triggered reload is queued: the pane uses it
+            // to explain why the page is about to go stale.
+            pendingRestart: isRestartPending(),
         };
     },
 
@@ -882,7 +937,8 @@ const davSync = {
             syncState.lastError = '';
             saveSyncState();
             updateBadge();
-            vAPI.app.restart();
+            // Same reasoning as syncNow(): reply first, reload later.
+            deferRestart();
             return this.getStatus();
         }
 
@@ -908,10 +964,11 @@ const davSync = {
 
     async syncNow() {
         const status = await runSyncOnce();
-        // 'pulled' means remote data was applied and the extension is about
-        // to restart; respond before restart via callback ordering is fine.
+        // 'pulled' means remote data was applied and the extension has to
+        // reload; schedule that *after* this reply is delivered (see
+        // deferRestart) instead of killing the sender mid-response.
         if ( status === 'pulled' ) {
-            vAPI.app.restart();
+            deferRestart();
         }
         return this.getStatus();
     },

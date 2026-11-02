@@ -338,6 +338,7 @@ const davSyncFields = [
 // password 保存密码框是否处于「已填但未保存」状态：密码不入库不下发，
 // 保存后输入框保留用户输入，仅当用户再次修改时才算有变更。
 let davSyncSaved = {
+    enabled: false,
     url: '',
     username: '',
     password: '',
@@ -349,6 +350,7 @@ let davSyncSaved = {
 const davSyncReadForm = function() {
     const interval = parseFloat(qs$('#davSyncInterval').value);
     return {
+        enabled: qs$('#davSyncEnabled').checked,
         url: qs$('#davSyncUrl').value.trim(),
         username: qs$('#davSyncUsername').value.trim(),
         password: qs$('#davSyncPassword').value,
@@ -363,8 +365,11 @@ const davSyncConfigComplete = function(cfg) {
 };
 
 // 表单相对已保存快照是否有变化
+// 注意包含 enabled：只勾选/取消「启用」也必须让「保存」可用，
+// 否则这个开关根本存不下去（曾经就是这样）。
 const davSyncFormChanged = function(cfg) {
-    return cfg.url !== davSyncSaved.url
+    return cfg.enabled !== davSyncSaved.enabled
+        || cfg.url !== davSyncSaved.url
         || cfg.username !== davSyncSaved.username
         || davSyncSaved.passwordDirty
         || cfg.deviceName !== davSyncSaved.deviceName
@@ -413,6 +418,7 @@ const refreshDavStatus = function(status) {
     // 记录已保存快照（密码不入库不下发：输入框保留用户输入，
     // 仅当用户再次修改时才算有变更）
     davSyncSaved = {
+        enabled: status.enabled === true,
         url: status.url || '',
         username: status.username || '',
         password: '',
@@ -421,7 +427,14 @@ const refreshDavStatus = function(status) {
         syncIntervalMinutes: typeof status.syncIntervalMinutes === 'number'
             ? status.syncIntervalMinutes : 30,
     };
-    // Conflict banner: show row + details, or hide it when resolved.
+    davSyncApplyBanner(status);
+    dom.text('#davSyncStatus', davStatusText(status));
+    davSyncUpdateUI();
+};
+
+// 冲突横幅：只关心 conflict / conflictRemoteMeta，供「整表刷新」与
+// 「状态行轮询」共用（轮询不能重填表单，否则会打断用户正在输入的内容）。
+const davSyncApplyBanner = function(status) {
     const row = qs$('#davSyncConflictRow');
     if ( status.conflict === true ) {
         row.style.display = '';
@@ -433,8 +446,40 @@ const refreshDavStatus = function(status) {
     } else {
         row.style.display = 'none';
     }
-    dom.text('#davSyncStatus', davStatusText(status));
-    davSyncUpdateUI();
+};
+
+// 动作执行：先显示「进行中」，收到回复再落状态。
+// 拉取成功会让扩展在 600ms 后重新加载，届时本页的消息端口失效——
+// 所以这里要么正常收尾，要么把页面刷新掉，绝不停在「同步中…」。
+const davSyncRunAction = function(payload, pendingText) {
+    dom.text('#davSyncStatus', pendingText);
+    let settled = false;
+    const timeoutMs = 30000;
+    const bail = function(text) {
+        if ( settled ) { return; }
+        settled = true;
+        dom.text('#davSyncStatus', text);
+        setTimeout(( ) => { location.reload(); }, 1200);
+    };
+    const guard = setTimeout(
+        ( ) => { bail('同步仍在后台进行，正在刷新页面确认结果…'); },
+        timeoutMs
+    );
+    vAPI.messaging.send('dashboard', payload).then(result => {
+        clearTimeout(guard);
+        if ( settled ) { return; }
+        settled = true;
+        if ( result instanceof Object === false ) { return; }
+        refreshDavStatus(result);
+        if ( result.pendingRestart === true ) {
+            // 云端数据已应用，扩展马上重新加载；刷新一次让本页重新连上新实例。
+            dom.text('#davSyncStatus', '已从云端应用，扩展正在重新加载…');
+            setTimeout(( ) => { location.reload(); }, 1600);
+        }
+    }).catch(( ) => {
+        clearTimeout(guard);
+        bail('扩展已重新加载，正在刷新页面…');
+    });
 };
 
 vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
@@ -451,7 +496,7 @@ for ( const sel of [ '#davSyncEnabled', ...davSyncFields ] ) {
 
 dom.on('#davSyncSave', 'click', ( ) => {
     const cfg = davSyncReadForm();
-    const status = vAPI.messaging.send('dashboard', {
+    vAPI.messaging.send('dashboard', {
         what: 'davSyncSetConfig',
         enabled: qs$('#davSyncEnabled').checked,
         url: cfg.url,
@@ -466,33 +511,67 @@ dom.on('#davSyncSave', 'click', ( ) => {
             davSyncSaved.passwordDirty = false;
             davSyncUpdateUI();
         }
+    }).catch(( ) => {
+        // 保存后可能立刻触发一次拉取，扩展重启会把回复掐断；刷新一次即可。
+        if ( davSyncRecover() ) { location.reload(); }
     });
 });
 
 dom.on('#davSyncNow', 'click', ( ) => {
-    dom.text('#davSyncStatus', '同步中…');
-    vAPI.messaging.send('dashboard', { what: 'davSyncNow' }).then(result => {
-        if ( result instanceof Object ) { refreshDavStatus(result); }
-    });
+    davSyncRunAction({ what: 'davSyncNow' }, '同步中…');
 });
 
 // Conflict resolution: 上传 keeps local, 下载 applies remote (then restarts).
 dom.on('#davSyncForceUpload', 'click', ( ) => {
-    dom.text('#davSyncStatus', '正在用本地覆盖云端…');
-    vAPI.messaging.send('dashboard', {
-        what: 'davSyncResolveConflict', direction: 'push',
-    }).then(result => {
-        if ( result instanceof Object ) { refreshDavStatus(result); }
-    });
+    davSyncRunAction(
+        { what: 'davSyncResolveConflict', direction: 'push' },
+        '正在用本地覆盖云端…'
+    );
 });
 
 dom.on('#davSyncForceDownload', 'click', ( ) => {
-    dom.text('#davSyncStatus', '正在应用云端版本…');
-    vAPI.messaging.send('dashboard', {
-        what: 'davSyncResolveConflict', direction: 'pull',
-    }).then(result => {
-        if ( result instanceof Object ) { refreshDavStatus(result); }
-    });
+    davSyncRunAction(
+        { what: 'davSyncResolveConflict', direction: 'pull' },
+        '正在应用云端版本…'
+    );
 });
+
+// 扩展重新加载后，本页的消息端口会失效，而且不是所有内核都会自动重载
+// chrome-extension:// 页面（实测 Kiwi 不会，页面 DOM 直接冻在旧状态）。
+// 这里做一次带节流的自愈刷新：一分钟内最多 3 次，避免扩展真的坏掉时死循环。
+const davSyncRecover = function() {
+    try {
+        const now = Date.now();
+        const hist = JSON.parse(sessionStorage.getItem('__davReloads') || '[]')
+            .filter(t => typeof t === 'number' && now - t < 60000);
+        if ( hist.length >= 3 ) { return false; }
+        hist.push(now);
+        sessionStorage.setItem('__davReloads', JSON.stringify(hist));
+        return true;
+    } catch {
+        return true;
+    }
+};
+
+// 状态行自动刷新：后台定时同步、启动同步、其他标签页的操作都会改变状态，
+// 而设置页不会重载。这里只刷新状态文字与冲突横幅，绝不重填表单——
+// 否则会打断用户正在输入的内容。
+const davSyncPollStatus = function() {
+    if ( document.hidden ) { return; }
+    if ( davSyncFormChanged(davSyncReadForm()) ) { return; }
+    const active = document.activeElement;
+    if ( active instanceof HTMLElement && active.closest('#davSync') !== null ) { return; }
+    vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
+        if ( status instanceof Object === false ) { return; }
+        if ( davSyncFormChanged(davSyncReadForm()) ) { return; }
+        davSyncApplyBanner(status);
+        dom.text('#davSyncStatus', davStatusText(status));
+        davSyncUpdateUI();
+    }).catch(( ) => {
+        // 端口已死 = 扩展重启过：刷新一次拿到新实例的状态。
+        if ( davSyncRecover() ) { location.reload(); }
+    });
+};
+setInterval(davSyncPollStatus, 10000);
 
 /******************************************************************************/

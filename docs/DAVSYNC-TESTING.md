@@ -14,6 +14,25 @@
 > 产物：`dist/build/uBlock0.davsync_v1.75.1.16.chromium.zip` 及解包目录
 > 环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
 
+## 限制：Quetta 无法在 MuMu 上测试（2026-11-02 定论）
+
+**结论：Quetta 不能作为本轮 Android 端测试载体，Android 端一律用 Kiwi（x86）代测。**
+
+- Quetta（`net.quetta.browser`）只发 **arm64-v8a** 包；MuMu 是 x86_64，`primaryCpuAbi=arm64-v8a`
+  意味着它经 **houdini**（日志里 `Intel Bridge Technology for NetEase Mumu`）翻译执行。
+- 一旦渲染页面，`sandboxed_process0` 启动约 0.2 秒即死，Zygote 明确记录
+  `Process <pid> exited due to signal 31 (SIGSYS)`，主进程侧是 `Child process died (type=6)`，
+  随后每 10–30 秒重启一次、再死一次 → 用户看到「喔唷，崩溃啦！」。
+- 根因是 Chromium 渲染进程要在自己身上装 seccomp-bpf 系统调用白名单
+  （`prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)`），而翻译层自身会发一些正常 ARM 程序不会发的
+  syscall，被过滤器拒绝后内核直接投递 SIGSYS。**与网页内容、与扩展都无关**。
+- 对照：同一页面用 Kiwi（`primaryCpuAbi=x86`，原生执行）打开，渲染进程稳定存活、零 SIGSYS。
+- 绕过尝试均无效：`--disable-seccomp-filter-sandbox` / `--no-sandbox` 写入
+  `/data/data/net.quetta.browser/files/chrome-command-line` 与 `/data/local/tmp/chrome-command-line`
+  后重启，仍然 15 次 SIGSYS（非调试构建不读该文件）。
+- 因此 Quetta 侧只能验证到「扩展后台进程在跑」，**配置界面与同步流程均无法验证**。
+  想真正测 Quetta 需要 arm64 真机或支持 arm64 原生执行的环境。
+
 ## 总结论（2026-10-22 更新）
 
 **fork 同步功能已在真实载体上端到端跑通（多端双向）。早期被否决的 Kiwi 已被推翻（有 x86 构建）。**
@@ -520,3 +539,55 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
   `getExtensionsInfo`。启用开关只能靠开发者模式 + Preferences。
 - pull 之后 `vAPI.app.restart()` 对 `--load-extension` 挂载的扩展会导致其被禁用（会话级启用丢失），
   但对 crx/INTERNAL 安装的扩展无害——这是测试形态差异，不是产品缺陷。
+
+---
+
+## 16. v1.75.1.108：设置页交互修复 + UI 全量回归 —— 2026-11-02
+
+用户反馈：「Kiwi 第一次同步时一直显示『同步中』，实际已经同步完了，界面文案不会自动更新」。
+
+### 16.1 根因
+
+`syncNow()` 在消息处理器里**直接**调 `vAPI.app.restart()`：拉取成功后扩展被立刻 reload，
+回复还没送到页面，端口就没了 → 设置页的 `.then()` 永远不触发，文案永远停在「同步中…」。
+（同理「用云端覆盖本地」也卡在「正在应用云端版本…」。）
+
+### 16.2 改了什么
+
+| # | 改动 | 说明 |
+|---|---|---|
+| 1 | `deferRestart()` | 拉取后**先回复、600ms 后再 reload**；`getStatus()` 增加 `pendingRestart` 字段 |
+| 2 | 设置页动作统一走 `davSyncRunAction()` | 有 30 秒兜底 + `catch`，收到 `pendingRestart` 时提示「扩展正在重新加载」并在 1.6 秒后刷新页面 |
+| 3 | 状态行轮询（10s） | 后台定时同步/启动同步造成的状态变化会自动反映；只在表单干净、无焦点、页面可见时刷新，**只改状态文字与冲突横幅，绝不重填表单** |
+| 4 | `davSyncRecover()` 自愈 | 端口已死（扩展重启过）时自动刷新页面，一分钟内最多 3 次防死循环。Kiwi 不会自动重载扩展页，页面会一直冻在旧状态，靠这个恢复 |
+| 5 | 脏检查纳入 `enabled` | 此前只勾「启用」不会让「保存」变可用，这个开关根本存不下去 |
+| 6 | `applyRemoteData()` 加固 | `storage.clear()` 之后**立刻**写回配置与状态，其余步骤逐个 try/catch；任何一步失败都会以 `apply-partial (...)` 形式出现在 `lastError`，而不是静默丢弃配置 |
+
+### 16.3 UI 回归结果（百分 150 / Cent，CDP 驱动 DOM 断言，13 项）
+
+| 用例 | 结果 |
+|---|---|
+| T1 初始：未启用 / 字段禁用 / 两按钮禁用 | ✅ |
+| T2 勾选「启用」→ 字段可用 + 保存可用；「立即同步」仍禁用（配置不全） | ✅ |
+| T3 填表 → 保存可用；「立即同步」仍禁用（未保存） | ✅ |
+| T4 保存 → 按钮复位、密码保留 | ✅ |
+| T5 点「立即同步」触发拉取：文案序列 `同步中…` → `已从云端应用，扩展正在重新加载…` → 页面自动刷新 → `已从云端应用 · <时间>` | ✅ |
+| T6 双方都改 → 冲突横幅弹出（含云端设备名/时间）→ 点「上传」后清除并变「已上传」 | ✅ |
+| T7 错误密码 → 状态栏 `错误：auth-failed (HTTP 401, ...)` | ✅ |
+| T8 轮询不覆盖正在输入的内容 | ✅ |
+| T9 后台同步后状态自动更新 | ✅ |
+
+测试脚本：`_tmp/uitest108.py`（本地脚本，未入库）。
+
+### 16.4 Android（Kiwi）侧
+
+- 同步引擎侧与 UI 侧的同一个问题在 Kiwi 上表现更重：扩展重启后 **Kiwi 不会重载扩展页**，
+  页面 DOM 直接冻结（点复选框只改外观、状态文字不动、消息端口已死）。§16.2 第 4 项的
+  自愈逻辑就是为这个加的。
+- Kiwi 无 `chrome_devtools_remote`，无法 CDP 驱动；UI 只能靠 `adb shell input` + 截图逐屏验证。
+  已验证：设置页正常渲染、勾选「启用」后字段与「保存」变为可用、`input text` + TAB 键可正确
+  填入 URL/用户名/密码/设备名。
+- 未能在 Kiwi 上跑完「保存 → 同步 → 文案更新」整条链路：反复替换扩展文件后，
+  Kiwi 的扩展页面（dashboard）出现白屏，仪表盘打不开（扩展弹窗倒是能开）。
+  该现象属于**测试环境被反复改动后的状态问题**，不是本轮改动引入——替换文件前
+  同一套 UI 在 Kiwi 上是能打开并保存成功的（23:13 那次真实保存触发了完整拉取）。
