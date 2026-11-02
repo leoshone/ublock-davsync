@@ -74,22 +74,26 @@
     <div class="li"><label><span style="display:inline-block;min-width:7em;">用户名</span><input type="text" id="davSyncUsername" autocomplete="off" style="flex:1;min-width:0;width:100%;max-width:38em;box-sizing:border-box;"></label></div>
     <div class="li"><label><span style="display:inline-block;min-width:7em;">应用密码</span><input type="password" id="davSyncPassword" autocomplete="off" style="flex:1;min-width:0;width:100%;max-width:38em;box-sizing:border-box;"></label></div>
     <div class="li"><label><span style="display:inline-block;min-width:7em;">设备名称</span><input type="text" id="davSyncDeviceName" placeholder="留空则使用平台名" style="flex:1;min-width:0;width:100%;max-width:38em;box-sizing:border-box;"></label></div>
-    <div class="li"><label><span style="display:inline-block;min-width:7em;">同步间隔</span><input type="number" id="davSyncInterval" min="5" max="720" step="5" value="30" placeholder="30 分钟" title="范围 5–720 分钟" style="width:8em;"></label></div>
-    <div class="li" id="davSyncConflictRow" style="display:none;background:#FDECEA;border:1px solid #F5B7B1;padding:0.6em 0.8em;border-radius:4px;">
-        <div style="margin-bottom:0.5em;"><strong id="davSyncConflictMsg" style="color:#B03A2E;">检测到两端都有修改，自动同步已暂停</strong></div>
-        <div id="davSyncConflictMeta" style="color:#888;margin-bottom:0.6em;"></div>
-        <div style="display:flex;gap:0.8em;">
-            <button type="button" id="davSyncForceUpload" style="background:#C0392B;color:#fff;border:none;padding:0.35em 1em;border-radius:3px;cursor:pointer;">用本地覆盖云端（上传）</button>
-            <button type="button" id="davSyncForceDownload" style="background:#2471A3;color:#fff;border:none;padding:0.35em 1em;border-radius:3px;cursor:pointer;">用云端覆盖本地（下载）</button>
+    <div class="li"><label><span style="display:inline-block;min-width:7em;">同步间隔</span><input type="number" id="davSyncInterval" min="5" max="720" step="5" value="30" placeholder="30" title="范围 5–720 分钟" style="width:6em;"><span style="margin-left:0.45em;">分钟</span></label></div>
+    <!-- .li 本身是 flex 容器，内容必须包在一个块级子元素里，否则标题/说明/按钮会被
+         排成同一行（曾经就是这样错位的）。 -->
+    <div class="li" id="davSyncConflictRow" style="display:none;">
+        <div style="width:100%;box-sizing:border-box;background:#FDECEA;border:1px solid #F5B7B1;padding:0.7em 0.85em;border-radius:4px;">
+            <div style="margin-bottom:0.35em;font-weight:bold;color:#B03A2E;">检测到两端都有修改，自动同步已暂停</div>
+            <div id="davSyncConflictMeta" style="color:#888;margin-bottom:0.6em;"></div>
+            <div style="display:flex;flex-wrap:wrap;gap:0.6em;">
+                <button type="button" id="davSyncForceUpload" style="flex:1 1 14em;background:#C0392B;color:#fff;border:none;padding:0.5em 1em;border-radius:3px;cursor:pointer;">用本地覆盖云端（上传）</button>
+                <button type="button" id="davSyncForceDownload" style="flex:1 1 14em;background:#2471A3;color:#fff;border:none;padding:0.5em 1em;border-radius:3px;cursor:pointer;">用云端覆盖本地（下载）</button>
+            </div>
+            <div style="color:#888;margin-top:0.55em;" title="备份文件：ublock-backup.conflict-*.json">冲突时云端旧版本已自动备份，选错也可找回。</div>
         </div>
-        <div style="color:#888;margin-top:0.5em;">冲突时云端旧版本已自动备份为 ublock-backup.conflict-*.json，选错也可找回。</div>
     </div>
     <div class="li">
         <button type="button" id="davSyncSave" disabled>保存</button>
         <button type="button" id="davSyncNow" disabled>立即同步</button>
-        <span id="davSyncStatus" style="margin-left:1em;"></span>
     </div>
-    <div class="li synopsis"><legend>同步内容：我的过滤 / 我的规则 / 白名单 / 过滤列表选择 / 常规设置。云端文件与官方“备份到文件”格式互通。启动后自动同步一次，之后按上方间隔定时同步；本地有改动约 1 分钟后自动上传。同步出错时扩展图标会显示红色「!」。</legend></div>
+    <div class="li" id="davSyncStatusRow"><span id="davSyncStatus" style="display:block;line-height:1.6;word-break:break-word;"></span></div>
+    <div class="li synopsis"><legend>启动后自动同步一次，之后按上方间隔定时同步；本地有改动约 1 分钟后自动上传。同步出错时扩展图标会显示红色「!」。</legend></div>
 </div>
 
 <hr>

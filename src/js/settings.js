@@ -390,9 +390,21 @@ const davSyncUpdateUI = function() {
         davSyncConfigComplete(cfg) === false || davSyncFormChanged(cfg) === true;
 };
 
+// 状态文案统一入口：为空时整行隐藏，避免「保存 / 立即同步」下方
+// 多出一条空白；文案长时在独立一行换行，不会再把按钮撑高。
+const davSyncSetStatus = function(text) {
+    const value = text || '';
+    dom.text('#davSyncStatus', value);
+    const row = qs$('#davSyncStatusRow');
+    if ( row !== null ) {
+        row.style.display = value === '' ? 'none' : '';
+    }
+};
+
 const davStatusText = status => {
     if ( status.enabled !== true ) { return '未启用'; }
-    if ( status.conflict === true ) { return '冲突：自动同步已暂停，请选择「上传」或「下载」'; }
+    // 冲突时上方红色横幅已经把情况说清楚了，状态行不再重复一遍。
+    if ( status.conflict === true ) { return ''; }
     if ( status.lastError ) {
         return `错误：${status.lastError}`;
     }
@@ -428,7 +440,7 @@ const refreshDavStatus = function(status) {
             ? status.syncIntervalMinutes : 30,
     };
     davSyncApplyBanner(status);
-    dom.text('#davSyncStatus', davStatusText(status));
+    davSyncSetStatus(davStatusText(status));
     davSyncUpdateUI();
 };
 
@@ -437,7 +449,8 @@ const refreshDavStatus = function(status) {
 const davSyncApplyBanner = function(status) {
     const row = qs$('#davSyncConflictRow');
     if ( status.conflict === true ) {
-        row.style.display = '';
+        // 显式 block：.li 的默认 display 是 flex，靠 '' 回退会把内部各块排成一行。
+        row.style.display = 'block';
         const meta = status.conflictRemoteMeta || {};
         const when = meta.timeStamp
             ? new Date(meta.timeStamp).toLocaleString() : '未知时间';
@@ -452,13 +465,13 @@ const davSyncApplyBanner = function(status) {
 // 拉取成功会让扩展在 600ms 后重新加载，届时本页的消息端口失效——
 // 所以这里要么正常收尾，要么把页面刷新掉，绝不停在「同步中…」。
 const davSyncRunAction = function(payload, pendingText) {
-    dom.text('#davSyncStatus', pendingText);
+    davSyncSetStatus(pendingText);
     let settled = false;
     const timeoutMs = 30000;
     const bail = function(text) {
         if ( settled ) { return; }
         settled = true;
-        dom.text('#davSyncStatus', text);
+        davSyncSetStatus(text);
         setTimeout(( ) => { location.reload(); }, 1200);
     };
     const guard = setTimeout(
@@ -473,7 +486,7 @@ const davSyncRunAction = function(payload, pendingText) {
         refreshDavStatus(result);
         if ( result.pendingRestart === true ) {
             // 云端数据已应用，扩展马上重新加载；刷新一次让本页重新连上新实例。
-            dom.text('#davSyncStatus', '已从云端应用，扩展正在重新加载…');
+            davSyncSetStatus('已从云端应用，扩展正在重新加载…');
             setTimeout(( ) => { location.reload(); }, 1600);
         }
     }).catch(( ) => {
@@ -565,7 +578,7 @@ const davSyncPollStatus = function() {
         if ( status instanceof Object === false ) { return; }
         if ( davSyncFormChanged(davSyncReadForm()) ) { return; }
         davSyncApplyBanner(status);
-        dom.text('#davSyncStatus', davStatusText(status));
+        davSyncSetStatus(davStatusText(status));
         davSyncUpdateUI();
     }).catch(( ) => {
         // 端口已死 = 扩展重启过：刷新一次拿到新实例的状态。
