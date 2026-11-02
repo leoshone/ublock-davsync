@@ -35,7 +35,9 @@ jobs:
           cat > docs/update.xml <<XML
           <?xml version="1.0" encoding="UTF-8"?>
           <gupdate xmlns="http://www.google.com/update2/response" protocol="2.0">
-            <app appid="ODECIHGAHFPHABAJBLGNMOPEIBMKHIFP">
+            <!-- appid 必须全小写：Chromium 用请求里的小写扩展 ID 与响应 appid 做精确字符串匹配，
+                 写成大写（如 ODECIHGAHFPHABAJBLGNMOPEIBMKHIFP）会被静默丢弃，更新永远不生效 -->
+            <app appid="odecihgahfphabajblgnmopeibmkhifp">
               <updatecheck codebase="https://github.com/leoshone/ublock-davsync/releases/download/${TAG}/${ASSET}" version="${VERSION}" />
             </app>
           </gupdate>
