@@ -24,9 +24,13 @@
     - Sync strategy is pull-first with an upload guard:
         * Remote newer AND no local dirty changes  -> apply remote, restart.
         * Local dirty changes AND remote unchanged -> push local.
-        * Both changed                             -> keep local, push
-          (last-writer-wins; user data size is small and conflict windows
-          are rare; a merge of arbitrary filter lists is not attempted).
+        * Both changed                             -> park in conflict state
+          and wait for the user to pick 上传/下载 (the remote snapshot is
+          archived next to the data file first). Never auto-resolve: that
+          silently drops one side's edits.
+    - The lock file is always released *before* returning, because a
+      successful pull restarts the extension and would otherwise abort the
+      DELETE in flight, leaving a stale lock for the whole TTL.
     - An ETag + local-snapshot hash is recorded after every push/pull so we
       can tell "local changed since last sync" from "same as last sync",
       which prevents sync self-oscillation.
@@ -97,6 +101,31 @@ const updateBadge = function() {
 // WebDAV client (fetch-based; Basic Auth only -- Jianguoyun/Nutstore,
 // Nextcloud, Apache/Nginx DAV all work with this).
 
+// Map HTTP status codes to actionable, user-facing error strings. Before this,
+// every failure surfaced as a bare "HTTP nnn" and -- because lock acquisition
+// only returned a boolean -- collapsed into "locked-by-other-device" even for
+// a plain auth failure, which made every configuration mistake undiagnosable.
+// 5xx deliberately stays as "HTTP 5xx": errorSeverity() treats that as
+// transient, everything else is a hard error that needs the user's attention.
+const describeHttpError = function(status) {
+    if ( status === 401 || status === 403 ) {
+        return `auth-failed (HTTP ${status}, check username / app password)`;
+    }
+    if ( status === 404 ) {
+        return 'remote-path-missing (HTTP 404)';
+    }
+    if ( status === 409 ) {
+        return 'remote-path-missing (HTTP 409, parent folder absent)';
+    }
+    if ( status === 412 ) {
+        return 'precondition-failed (HTTP 412)';
+    }
+    if ( status === 507 ) {
+        return 'quota-exceeded (HTTP 507)';
+    }
+    return `HTTP ${status}`;
+};
+
 const davRequest = async function(config, method, filePath, details = {}) {
     const base = config.url.replace(/\/+$/, '');
     const url = `${base}/${filePath.split('/').map(encodeURIComponent).join('/')}`;
@@ -135,7 +164,11 @@ const davRequest = async function(config, method, filePath, details = {}) {
         return { ok: true, notFound: true, status: 404 };
     }
     if ( response.ok === false ) {
-        return { ok: false, status: response.status, error: `HTTP ${response.status}` };
+        return {
+            ok: false,
+            status: response.status,
+            error: describeHttpError(response.status),
+        };
     }
     const etag = response.headers.get('ETag') || response.headers.get('Etag') || '';
     const text = details.wantBody === false ? '' : await response.text();
@@ -226,18 +259,27 @@ const davLockPath = function(config) {
     return dir !== '' ? `${dir}/ublock-sync.lock` : DAV_LOCK_PATH.split('/').pop();
 };
 
-// Returns true if the lock was acquired.
+// Returns { ok: true } or { ok: false, error, contended }.
+//
+// `contended` marks the only case worth retrying after a delay: another device
+// holds a live lock and will presumably let go. Auth failures, missing folders
+// and network errors cannot be fixed by waiting, and reporting them as
+// "locked-by-other-device" (the old boolean API did exactly that) sent users
+// hunting for a phantom second device.
 const davLockAcquire = async function(config) {
     const lockPath = davLockPath(config);
     // Read existing lock: if fresh, somebody else is syncing right now.
     const existing = await davRequest(config, 'GET', lockPath, {
         allowNotFound: true,
     });
-    if ( existing.ok === true && existing.notFound !== true ) {
+    if ( existing.ok === false ) {
+        return { ok: false, error: existing.error, contended: false };
+    }
+    if ( existing.notFound !== true ) {
         try {
             const info = JSON.parse(existing.text);
             if ( Date.now() - (info.timeStamp || 0) < LOCK_TTL_MS ) {
-                return false;   // someone else holds a live lock
+                return { ok: false, error: 'locked-by-other-device', contended: true };
             }
         } catch {
             // Unparseable lock: treat as stale and take over.
@@ -249,7 +291,10 @@ const davLockAcquire = async function(config) {
             deviceName: config.deviceName || '',
         }, null, 1),
     });
-    return put.ok === true;
+    if ( put.ok === false ) {
+        return { ok: false, error: put.error, contended: false };
+    }
+    return { ok: true };
 };
 
 const davLockRelease = async function(config) {
@@ -277,7 +322,10 @@ let config = Object.assign({}, configDefault);
 const configReady = (async ( ) => {
     const bin = await vAPI.storage.get('davSyncConfig');
     if ( bin instanceof Object && bin.davSyncConfig instanceof Object ) {
-        config = Object.assign(configDefault, bin.davSyncConfig);
+        // Copy into a fresh object: Object.assign(configDefault, stored) used
+        // to mutate the module-level default in place, so every later
+        // Object.assign({}, configDefault) inherited stale stored values.
+        config = Object.assign({}, configDefault, bin.davSyncConfig);
     }
     return config;
 })();
@@ -361,6 +409,40 @@ const saveSyncState = function( ) {
 };
 
 /******************************************************************************/
+// Conflict handling. Automatic sync is paused (badge '!') until the user picks
+// 上传 or 下载 in the settings pane: auto-resolving would silently discard one
+// side's edits. Before parking, the remote snapshot is archived next to the
+// data file so the losing side is always recoverable by hand.
+
+const parkConflict = async function(remote) {
+    let remoteSnapshot;
+    try {
+        remoteSnapshot = JSON.parse(remote.text);
+    } catch {
+        syncState.lastError = 'remote-parse-failed';
+        saveSyncState();
+        updateBadge();
+        return syncState.lastError;
+    }
+    const dir = config.filePath.split('/').slice(0, -1).join('/');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const archivePath = dir !== ''
+        ? `${dir}/ublock-backup.conflict-${ts}.json`
+        : `ublock-backup.conflict-${ts}.json`;
+    await davRequest(config, 'PUT', archivePath, { body: remote.text });
+    syncState.conflict = true;
+    syncState.conflictRemoteMeta = {
+        deviceName: remoteSnapshot.deviceName || '',
+        timeStamp: remoteSnapshot.timeStamp || 0,
+    };
+    syncState.lastError = 'both-changed';
+    syncState.lastSyncTime = Date.now();
+    saveSyncState();
+    updateBadge();
+    return 'both-changed';
+};
+
+/******************************************************************************/
 // Core sync algorithm. Returns a short human-readable status string.
 
 const runSyncOnce = async function( ) {
@@ -381,21 +463,40 @@ const runSyncOnce = async function( ) {
     // 0. Mutual exclusion: another device may be mid-sync. One retry after
     // a short wait covers the common "both devices hit the periodic alarm"
     // case without complicating the caller.
-    let locked = await davLockAcquire(config);
-    if ( locked === false ) {
+    let lock = await davLockAcquire(config);
+
+    // A brand-new account has no collection yet, so the lock PUT lands on a
+    // missing parent and fails with 409/404. Create the folders and retry
+    // once -- previously this surfaced as a bogus "locked-by-other-device"
+    // and the very first sync could never succeed without manual mkdir.
+    if ( lock.ok === false && lock.contended === false &&
+        typeof lock.error === 'string' &&
+        lock.error.startsWith('remote-path-missing') ) {
+        await davMkdirp(config);
+        lock = await davLockAcquire(config);
+    }
+
+    if ( lock.ok === false && lock.contended === true ) {
         await new Promise(resolve => setTimeout(resolve, 8000));
-        locked = await davLockAcquire(config);
-        if ( locked === false ) {
-            syncState.lastError = 'locked-by-other-device';
-            saveSyncState();
-            return syncState.lastError;
-        }
+        lock = await davLockAcquire(config);
+    }
+
+    if ( lock.ok === false ) {
+        syncState.lastError = lock.error;
+        saveSyncState();
+        updateBadge();
+        return lock.error;
     }
 
     try {
         return await runSyncOnceLocked();
     } finally {
-        davLockRelease(config);
+        // Awaited on purpose. The caller restarts the extension right after a
+        // successful pull, and chrome.runtime.reload() aborts whatever is in
+        // flight -- the fire-and-forget release therefore never reached the
+        // server and left a lock behind that blocked every sync for the whole
+        // TTL (5 min). Observed in the wild, see docs/DAVSYNC-TESTING.md.
+        await davLockRelease(config);
     }
 };
 
@@ -455,6 +556,31 @@ const runSyncOnceLocked = async function( ) {
         return 'in-sync';
     }
 
+    // A device that has never recorded a sync cannot know whether it is
+    // joining an existing group (pull) or publishing its own setup (push).
+    // Anything it has customised by hand is treated as "worth asking about";
+    // otherwise the remote is adopted, which is what a fresh second browser
+    // needs -- and what never happened before: the run fell through to step 7
+    // and reported in-sync without ever receiving the existing data.
+    const neverSynced = syncState.lastLocalFingerprint === '';
+    const remoteChanged = remoteSameAsLocal === false &&
+        remoteFp !== syncState.lastLocalFingerprint;
+
+    // 4a. Both ends changed -> conflict, not a silent last-writer-wins.
+    //     This used to fall through to step 7: the local edit was never
+    //     pushed (no PUT was even attempted) yet the status said in-sync, so
+    //     the two devices diverged invisibly.
+    const localHasCustomFilters = Array.isArray(local.userFilters) &&
+        local.userFilters.some(line => {
+            const t = line.trim();
+            return t !== '' && t.startsWith('!') === false;
+        });
+    if ( remoteChanged && localDirty ) {
+        if ( neverSynced === false || localHasCustomFilters ) {
+            return parkConflict(remote);
+        }
+    }
+
     // 5. Local dirty & remote unchanged since we last saw it -> push
     if ( localDirty && ( remoteMatchesLastEtag || remoteFp === syncState.lastLocalFingerprint ) ) {
         const put = await davPutVerified(
@@ -484,8 +610,6 @@ const runSyncOnceLocked = async function( ) {
         // 412 Precondition Failed: remote moved on while our local copy is
         // also dirty => BOTH sides changed. Do not auto-resolve: park in
         // conflict state (badge '!') and let the user pick 上传/下载.
-        // Before parking, archive the remote version next to the data file
-        // so the losing side is always recoverable.
         remote = await davGet(config);
         if ( remote.ok === false || remote.notFound === true ) {
             syncState.lastError = remote.ok ? 'remote-vanished' : remote.error;
@@ -493,35 +617,13 @@ const runSyncOnceLocked = async function( ) {
             updateBadge();
             return syncState.lastError;
         }
-        let remoteSnapshot;
-        try {
-            remoteSnapshot = JSON.parse(remote.text);
-        } catch {
-            syncState.lastError = 'remote-parse-failed';
-            saveSyncState();
-            updateBadge();
-            return syncState.lastError;
-        }
-        const dir = config.filePath.split('/').slice(0, -1).join('/');
-        const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        await davRequest(config, 'PUT',
-            `${dir}/ublock-backup.conflict-${ts}.json`,
-            { body: remote.text });
-        syncState.conflict = true;
-        syncState.conflictRemoteMeta = {
-            deviceName: remoteSnapshot.deviceName || '',
-            timeStamp: remoteSnapshot.timeStamp || 0,
-        };
-        syncState.lastError = 'both-changed';
-        syncState.lastSyncTime = Date.now();
-        saveSyncState();
-        updateBadge();
-        return 'both-changed';
+        return parkConflict(remote);
     }
 
     // 6. Remote has changes we do not have -> apply remote (pull wins).
-    //    (Safe: local was NOT dirty, so nothing of ours is lost.)
-    if ( remoteSameAsLocal === false && localDirty === false ) {
+    //    (Safe: local was NOT dirty, or this device has never synced and
+    //    carries nothing worth protecting, so nothing of ours is lost.)
+    if ( remoteSameAsLocal === false && (localDirty === false || neverSynced) ) {
         await applyRemoteData(remoteData);
         const localNow = await collectLocalData();
         syncState.lastEtag = remote.etag || '';

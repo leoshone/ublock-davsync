@@ -467,3 +467,56 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 - 上游 main.yml 已禁用自动构建（其产物无 key/update_url，见 main.yml 内注释），
   发版后不再产生需手删的原版资产。
 
+
+---
+
+## 15. v1.75.1.107：同步逻辑缺陷修复 + Turbo × Cent 互通复验 —— 2026-11-02
+
+1.75.1.106 的实测暴露出 5 个缺陷（详见 `DavSync同步功能实测报告.html`），本版全部修掉，
+并用 **Turbo 154（INTERNAL 安装）× 百分 5.3.1184.25(Cent 150)** 做互通复验。
+
+### 15.1 修了什么
+
+| # | 缺陷 | 修复 |
+|---|---|---|
+| A | 拉取成功后锁不释放：`finally { davLockRelease() }` 没有 await，而 `pulled` 立刻 `vAPI.app.restart()` 把 DELETE 掐断 → 服务端留 5 分钟陈旧锁，之后所有同步都报 `locked-by-other-device` | `await davLockRelease(config)`，确保释放完成才返回 |
+| B | 双方都改时**不报冲突**：走不到 412 分支，落到第 7 步「仅刷新指纹」→ 本地改动既不推送也不拉取，状态却显示 `in-sync`（静默丢改动） | 新增 `parkConflict()`；第 4a 步显式判定 `localDirty && remoteChanged` → 归档远端快照 + `conflict=true` + `both-changed`，自动同步暂停等用户抉择 |
+| C | 任何非 2xx 都被折叠成 `locked-by-other-device`（401 = 密码错、409 = 目录不存在、真占用，全都长一样） | `davLockAcquire` 改为返回 `{ok, error, contended}`；`describeHttpError()` 把 401/403 映射 `auth-failed`、404/409 映射 `remote-path-missing`、507 映射 `quota-exceeded`；只有真占用才 8 秒后重试 |
+| D | 远端目录不存在时锁 PUT 先失败（409），首次同步永远失败且报「被占用」 | 锁获取失败且错误为 `remote-path-missing` 时自动 `davMkdirp()` 并重试一次 |
+| E | `Object.assign(configDefault, stored)` 就地污染模块级默认值 | 改为 `Object.assign({}, configDefault, stored)` |
+
+附带修掉一个从来没被发现的逻辑洞：**新设备首次同步永远拿不到已有数据**。
+`lastLocalFingerprint === ''` 时 `localDirty` 恒为 true，旧代码既不走 pull 也不走 push，
+直接落到第 7 步记个 `in-sync`。现在区分两种情形：本地没有自建过滤器 → 直接采纳远端；
+本地已有过滤器 → 走冲突流程让用户选。
+
+另：`tools/make-packages.cjs` 现在会从签名私钥推导公钥自动补 `manifest.key`
+（之前忘了手工补就直接 FATAL）。
+
+### 15.2 Turbo × Cent 互通结果（本地迷你 WebDAV）
+
+| 步骤 | 结果 | 证据 |
+|---|---|---|
+| A 首次推送（远端目录不存在） | ✅ | 日志：`PUT lock → 409 (no collection)` → `MKCOL → 201 created` → 重试 `PUT lock → 201` → `PUT backup` |
+| B 新设备加入 → 拉取 | ✅ | `lastDirection=pull`，B 本地过滤器出现 `||from-turbo.com^` |
+| 拉取后锁释放 | ✅ | pull 之后紧跟 `DELETE lock → 204 deleted`，下一轮立刻 `PUT lock → 201` |
+| B 改动 → A 拉取 | ✅ | A 本地过滤器变成两条（turbo + cent） |
+| 双方都改 | ✅ | `lastError=both-changed` / `conflict=true` / `conflictRemoteMeta.deviceName=cent-b`；远端快照归档为 `ublock-backup.conflict-<ts>.json`；A 本地改动完好 |
+| 冲突后自动同步暂停 | ✅ | 重复同步仍为 `both-changed`，不发 PUT |
+| 用户选择上传解除冲突 | ✅ | `conflict=false`、远端变为 A 的版本；B 随后 pull 到同一版本 |
+| 错误密码 | ✅ | `auth-failed (HTTP 401, check username / app password)`，且不再触发 8 秒重试 |
+| 真锁占用 | ✅ | `locked-by-other-device` + `errorSeverity=transient` |
+| 连续同步无自激 | ✅ | 两端各跑一轮：只有 `GET lock / PUT lock / GET backup / DELETE lock`，0 次 backup PUT |
+
+### 15.3 环境备忘（重要）
+
+- `--load-extension` 在 Turbo 154 / Cent 150 上**需要开发者模式**，否则扩展被标记
+  `disable_reasons=1<<24`（不支持的开发者扩展）并强制 DISABLED。
+  开发者模式 = Preferences 里 `extensions.ui.developer_mode=true`（Cent 无 HMAC，可以直接预写）。
+- Turbo 把扩展条目放进 **Secure Preferences**（HMAC 保护），预写无效；
+  要在 Turbo 上跑「重启后仍启用」的长流程，只能**复制真实 profile**（扩展本来就是 INTERNAL 安装）
+  再覆盖 `js/davsync.js`——这也是最贴近用户真实环境的做法。
+- `chrome.developerPrivate.setEnabled` 在 154/150 上**已不存在**；可用的是 `reload` / `loadUnpacked` /
+  `getExtensionsInfo`。启用开关只能靠开发者模式 + Preferences。
+- pull 之后 `vAPI.app.restart()` 对 `--load-extension` 挂载的扩展会导致其被禁用（会话级启用丢失），
+  但对 crx/INTERNAL 安装的扩展无害——这是测试形态差异，不是产品缺陷。

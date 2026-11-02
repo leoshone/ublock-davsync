@@ -33,10 +33,18 @@ const OUTDIR = path.join(ROOT, 'dist', 'build');
 const keyPath = process.argv[2] ||
     'D:/AiSpaces/Work/2026-10-21-21-29-21/_tmp/davsync-key.pem';
 
-const mf = JSON.parse(fs.readFileSync(path.join(BUILD, 'manifest.json'), 'utf-8'));
+const mfPath = path.join(BUILD, 'manifest.json');
+const mf = JSON.parse(fs.readFileSync(mfPath, 'utf-8'));
 if (!mf.key) {
-    console.error('FATAL: manifest.json 缺少 "key" 字段（扩展 ID 会不固定）');
-    process.exit(1);
+    // 构建脚本不会注入 key，手工补一步很容易忘（忘了就 FATAL 中断）。
+    // 直接从签名私钥推导公钥写回 manifest：扩展 ID = 公钥 SHA256 前 128 位
+    // 转 a-z，所以同一把 pem 永远得到同一个 ID。
+    const { createPublicKey } = require('crypto');
+    mf.key = createPublicKey(fs.readFileSync(keyPath, 'utf-8'))
+        .export({ type: 'spki', format: 'der' })
+        .toString('base64');
+    fs.writeFileSync(mfPath, JSON.stringify(mf, null, 2) + '\n');
+    console.log('manifest.json 缺少 key，已从', keyPath, '推导并写入');
 }
 
 // 递归收集文件（crx3 工具要求文件路径列表，zip 内相对路径 = 相对 BUILD）
