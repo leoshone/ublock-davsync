@@ -818,7 +818,13 @@ mkdir -p /tmp/ffp && npx web-ext run --help >/dev/null   # 首次会装 web-ext
 
 # 3. 装成临时附加组件并打开设置页
 #    <uuid> 见下一步；第一次跑可以先不带 --start-url
-MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 npx web-ext run   --source-dir dist/build/uBlock0.firefox   --firefox "C:/Program Files/Mozilla Firefox/firefox.exe"   --firefox-profile /tmp/ffp --keep-profile-changes --no-input --no-reload   --args=--remote-debugging-port=9223   --start-url "moz-extension://<uuid>/settings.html"
+MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 npx web-ext run \
+  --source-dir dist/build/uBlock0.firefox \
+  --firefox "C:/Program Files/Mozilla Firefox/firefox.exe" \
+  --firefox-profile /tmp/ffp \
+  --keep-profile-changes --no-input --no-reload \
+  --args=--remote-debugging-port=9223 \
+  --start-url "moz-extension://<uuid>/settings.html"
 
 # 4. 取扩展 UUID（两种来源均可）
 #    a) prefs.js 里按 gecko id 查：uBlock0@raymondhill.net
