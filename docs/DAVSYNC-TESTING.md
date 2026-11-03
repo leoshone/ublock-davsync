@@ -796,8 +796,86 @@ N1 覆盖的是一个**会丢配置**的缺陷：设置页不回填密码，所�
 | 云端改动后启动，pull 生效：本地规则变为 `["||ff-round2.com^"]` | ✅ |
 | 所有同步 `err=-`（无异常） | ✅ |
 
-**观察到的小问题（未修）**：pull 触发扩展重启后，新实例会**再 pull 一次**（两次间隔约 4.4 秒）。
-把该分支的 `saveSyncState()` 改成 `await` 后仍然复现，说明不是「状态没写完」，更像
-`applyRemoteData` 写进 uBO 存储的数据在重启后读回来与远端不完全一致，导致 `remoteSameAsLocal`
-仍为 false。第二次 pull 是幂等的、不会无限循环（每次启动最多两次），数据最终一致，
-但会多一次重启 + 一次网络往返。留待后续排查。
+**当时观察到的小问题（已在 1.75.1.118 / 1.75.1.119 修复）**：pull 触发扩展重启后，新实例会**再 pull 一次**
+（或反手 push 一次）。根因不是「状态没写完」，而是两个判据问题：
+① 应用远端后立刻 `collectLocalData()` 读到的是**应用前**的内存态（实测 whitelist 仍是默认值），
+据此记下的本地指纹是错的；② `remoteChanged` 拿「上次本地指纹」比较，把「拉取后第一次本地改动」误判成冲突。
+修法与复验见 §16 的「补充（1.75.1.118 / 1.75.1.119）」，Firefox 上现为 `boot → dir=pull → boot → dir=none`。
+
+### 17.4 复现步骤（命令级，从零跑一遍）
+
+前提：Firefox 正式版（本次 159）、Node 环境、本地起一个 WebDAV 服务（仓库外的 `webdav.py`，
+监听 `127.0.0.1:8088`，账号 `davtest/davtest123`）。
+
+```bash
+# 1. 构建 Firefox 包
+bash tools/make-firefox.sh
+#   → dist/build/uBlock0.firefox（解包目录）
+#   需要 .xpi 时把该目录 zip 成 uBlock0.davsync_v<ver>.firefox.xpi
+
+# 2. 准备一个干净的 profile 目录（web-ext 要求目录已存在）
+mkdir -p /tmp/ffp && npx web-ext run --help >/dev/null   # 首次会装 web-ext
+
+# 3. 装成临时附加组件并打开设置页
+#    <uuid> 见下一步；第一次跑可以先不带 --start-url
+MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1 npx web-ext run   --source-dir dist/build/uBlock0.firefox   --firefox "C:/Program Files/Mozilla Firefox/firefox.exe"   --firefox-profile /tmp/ffp --keep-profile-changes --no-input --no-reload   --args=--remote-debugging-port=9223   --start-url "moz-extension://<uuid>/settings.html"
+
+# 4. 取扩展 UUID（两种来源均可）
+#    a) prefs.js 里按 gecko id 查：uBlock0@raymondhill.net
+grep -o '"uBlock0@raymondhill.net":"[0-9a-f-]\{36\}"' /tmp/ffp/prefs.js
+#    b) 看 storage 目录名
+ls /tmp/ffp/storage/default/ | grep moz-extension
+
+# 5. 若 start-url 没生效（只开了 about:blank）：删掉会话恢复再试
+rm -f /tmp/ffp/sessionstore.jsonlz4 && rm -rf /tmp/ffp/sessionstore-backups
+```
+
+驱动（BiDi，Python 标准库即可，见本地 `_tmp/bidi.py`）：
+
+```python
+ws = WS('ws://127.0.0.1:9223/session')
+ws.call('session.new', {'capabilities': {}})
+ctx = [c for c in contexts(ws) if 'moz-extension' in c['url']][0]['context']
+ws.call('script.evaluate', {'expression': 'document.title', 'target': {'context': ctx},
+                            'awaitPromise': True, 'resultOwnership': 'none'})
+ws.call('session.end', {})   # 必须调用，否则下次报 Maximum number of active sessions
+```
+
+> 实测：`script.evaluate` 打在扩展页上会报 `System access is required`（即使设了环境变量），
+> 所以 **UI 断言在 Firefox 上不可用**；能自动化的只有「打开设置页 + 截图」这一步。
+
+要验证**同步引擎**（而不是 UI），用「带钩子的同源构建」：复制一份 `dist/build/uBlock0.firefox`，
+在 `js/davsync.js` 末尾 `export default davSync;` 之前插入：
+
+```js
+const ffLog = msg => { try { fetch('http://127.0.0.1:8088/log/' + encodeURIComponent(msg)).catch(()=>{}); } catch {} };
+( async () => {
+    await configReady;
+    if ( config.url === '' ) {                    // 首次自动配置，省掉 UI 操作
+        config.url = 'http://127.0.0.1:8088/dav/';
+        config.username = 'davtest';
+        config.password = 'davtest123';
+        config.deviceName = 'firefox-test';
+        config.enabled = true;
+        await saveConfig();
+    }
+    ffLog('boot');
+    setTimeout(() => {
+        davSync.syncNow().then(st => ffLog('sync dir=' + st.lastDirection + ' err=' + (st.lastError || '-')));
+    }, 3000);
+})();
+```
+
+然后用 `web-ext run --source-dir <那份副本>` 启动，结果从 WebDAV 访问日志里读：
+
+```bash
+grep -o "/log/[^ ]*" webdav.log | python -c "import sys,urllib.parse;[print(urllib.parse.unquote(l.strip())) for l in sys.stdin]"
+# /log/boot
+# /log/sync dir=push err=-
+```
+
+判定「拉取后是否回弹」：先跑一次让它 push，改云端文件后再重启 Firefox，
+日志应为 `boot → dir=pull → boot → dir=none`（119 之后的行为）。
+
+截图核对 UI（无法注入脚本时的兜底）：用 `PrintWindow` 抓窗口位图存 PNG，
+再用 `PostMessage(WM_KEYDOWN, VK_NEXT)` 向下翻页——鼠标事件打不进内容区。
