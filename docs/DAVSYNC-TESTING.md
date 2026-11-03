@@ -642,13 +642,16 @@ N1 覆盖的是一个**会丢配置**的缺陷：设置页不回填密码，所�
 
 
 
-补充（1.75.1.117）：输入框改为通栏，右端与下方区域对齐
-- 原来输入框带 `max-width:38em`，PC 宽屏上右端只到半屏，看着很短。
-- 真正生效的修法不是去掉 max-width：输入框是 `<label>` 的子元素，`flex:1` 对它无效，
-  页面里 label 本身只有内容宽度（实测 233px）。改为 **label `flex:1;min-width:0`** +
-  输入框 `width:100%`，让 label 撑满整行、输入框吃满剩余宽度。
-- 实测右边缘：1100px 视口 → 输入框/fieldset/storageUsed 右边缘同为 1071；
-  411px → 同为 397。两端均与下方区域对齐。
+补充（1.75.1.118）：修「拉取后回弹」——pull 完重启，新实例又 push/pull 一次
+- 现象（Firefox 最明显）：pull → 重启 → 新实例再 `pull`（或 `push`）一次，多一次重启 + 一次
+  网络往返，还会把云端文件版本顶掉，让别的设备白拉一次。
+- 定位：诊断构建在 pull 后对比「远端 payload vs 本地重读」得到 `DIFF: none`；真正的差异在**重启之后**——
+  本地 `userSettings` 从 `{"importedLists":[]}` 变成 `{}`，uBO 读回时把「等于默认值」的项归一化掉了，
+  指纹随之变化 → 被判成本地有改动。
+- 修法：1) `applyRemoteData()` 写入 `userSettings` 前剔除等于 `µb.userSettingsDefault` 的项，
+  重启前后形态一致；2) 新增 `syncState.lastAppliedRemoteFp`，远端与上次应用版本相同且本地未变时直接判 in-sync。
+- 验证：Firefox 159 `boot → dir=pull → boot → dir=none`，云端 `deviceName` 保持对端值未被回写；
+  百分 150 pull 后云端同样未被覆盖，本地规则正确应用。
 
 补充（1.75.1.117）：输入框改为通栏，右端与下方区域对齐
 - 原来输入框带 `max-width:38em`，PC 宽屏上右端只到半屏，看着很短。
