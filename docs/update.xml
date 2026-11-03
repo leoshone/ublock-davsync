@@ -3,6 +3,6 @@
   <!-- appid 必须全小写：Chromium 用请求里的小写扩展 ID 与响应 appid 做精确字符串匹配，
        写成大写（如 ODECIHGAHFPHABAJBLGNMOPEIBMKHIFP）会被静默丢弃，更新永远不生效 -->
   <app appid="odecihgahfphabajblgnmopeibmkhifp">
-    <updatecheck codebase="https://github.com/leoshone/ublock-davsync/releases/download/v1.75.1.110/uBlock0.davsync_v1.75.1.110.chromium.crx" version="1.75.1.110" />
+    <updatecheck codebase="https://github.com/leoshone/ublock-davsync/releases/download/v1.75.1.111/uBlock0.davsync_v1.75.1.111.chromium.crx" version="1.75.1.111" />
   </app>
 </gupdate>
