@@ -585,6 +585,7 @@ const runSyncOnceLocked = async function( ) {
         }
         syncState.lastEtag = put.etag || '';
         syncState.lastLocalFingerprint = localFp;
+        syncState.lastAppliedRemoteFp = localFp;
         syncState.lastSyncTime = Date.now();
         syncState.lastDirection = 'push';
         syncState.lastError = '';
@@ -642,8 +643,14 @@ const runSyncOnceLocked = async function( ) {
     // needs -- and what never happened before: the run fell through to step 7
     // and reported in-sync without ever receiving the existing data.
     const neverSynced = syncState.lastLocalFingerprint === '';
+    // 「远端有没有变」必须拿**我们已知的远端版本**来比，不能拿上次的本地指纹：
+    // 拉取后那次记录的本地指纹是「应用之前」的读数（uBO 内存态尚未刷新），
+    // 用它比较会把「拉取后第一次本地改动」误判成冲突。
+    const knownRemoteFp = syncState.lastAppliedRemoteFp !== ''
+        ? syncState.lastAppliedRemoteFp
+        : syncState.lastLocalFingerprint;
     const remoteChanged = remoteSameAsLocal === false &&
-        remoteFp !== syncState.lastLocalFingerprint;
+        remoteFp !== knownRemoteFp;
 
     // 4a. Both ends changed -> conflict, not a silent last-writer-wins.
     //     This used to fall through to step 7: the local edit was never
@@ -661,7 +668,7 @@ const runSyncOnceLocked = async function( ) {
     }
 
     // 5. Local dirty & remote unchanged since we last saw it -> push
-    if ( localDirty && ( remoteMatchesLastEtag || remoteFp === syncState.lastLocalFingerprint ) ) {
+    if ( localDirty && ( remoteMatchesLastEtag || remoteFp === knownRemoteFp ) ) {
         const put = await davPutVerified(
             config,
             JSON.stringify(local, null, 1),
@@ -671,6 +678,7 @@ const runSyncOnceLocked = async function( ) {
         if ( put.ok === true ) {
             syncState.lastEtag = put.etag || '';
             syncState.lastLocalFingerprint = localFp;
+            syncState.lastAppliedRemoteFp = localFp;
             syncState.lastSyncTime = Date.now();
             syncState.lastDirection = 'push';
             syncState.lastError = '';
@@ -733,6 +741,7 @@ const runSyncOnceLocked = async function( ) {
     // 7. Only fingerprint bookkeeping was stale
     syncState.lastEtag = remote.etag || '';
     syncState.lastLocalFingerprint = localFp;
+    syncState.lastAppliedRemoteFp = remoteFp;
     syncState.lastSyncTime = Date.now();
     syncState.lastError = '';
     syncState.conflict = false;
@@ -1032,6 +1041,7 @@ const davSync = {
         if ( put.ok === true ) {
             syncState.lastEtag = put.etag || '';
             syncState.lastLocalFingerprint = fingerprintLocalData(local);
+            syncState.lastAppliedRemoteFp = fingerprintLocalData(local);
             syncState.lastSyncTime = Date.now();
             syncState.lastDirection = 'push';
             syncState.lastError = '';

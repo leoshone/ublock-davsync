@@ -642,14 +642,27 @@ N1 覆盖的是一个**会丢配置**的缺陷：设置页不回填密码，所�
 
 
 
+补充（1.75.1.119）：补两个 in-sync 判据的漏洞
+- **拉取后第一次本地改动被误判成冲突**：`remoteChanged` 原本拿「上次本地指纹」比较，
+  而拉取后那次记录的是**应用之前**的读数（uBO 内存态还没刷新，实测 whitelist 仍是默认的
+  `chrome-extension-scheme,moz-extension-scheme`）。于是「远端没变 + 用户改了本地」被判成「两边都改」。
+  改为用 `knownRemoteFp`（= 上次应用/推送的远端指纹，没有则回退到本地指纹）来比较。
+- **push 之后没更新 `lastAppliedRemoteFp`**：远端若被别的设备改回「我们更早应用过的那一版」，
+  早退判据会误判成已同步。现在三处 push 与 bookkeeping 分支都会更新它。
+- 尝试过但**未采用**的方案：把两侧 `userSettings` 都做归一化再比指纹。实测在 Firefox 上
+  会退化成「每次启动多拉一次」甚至误报冲突（本地重读的形态与远端 payload 仍有差异），
+  故回退，只保留上面两条改动。
+- 验证：Firefox `boot→dir=pull→boot→dir=none` 且云端 `deviceName` 保持对端值；
+  百分 150 上「本地改动→已上传」「云端改动→已从云端应用」，均不再误判冲突。
+
 补充（1.75.1.118）：修「拉取后回弹」——pull 完重启，新实例又 push/pull 一次
 - 现象（Firefox 最明显）：pull → 重启 → 新实例再 `pull`（或 `push`）一次，多一次重启 + 一次
   网络往返，还会把云端文件版本顶掉，让别的设备白拉一次。
 - 定位：诊断构建在 pull 后对比「远端 payload vs 本地重读」得到 `DIFF: none`；真正的差异在**重启之后**——
   本地 `userSettings` 从 `{"importedLists":[]}` 变成 `{}`，uBO 读回时把「等于默认值」的项归一化掉了，
   指纹随之变化 → 被判成本地有改动。
-- 修法：1) `applyRemoteData()` 写入 `userSettings` 前剔除等于 `µb.userSettingsDefault` 的项，
-  重启前后形态一致；2) 新增 `syncState.lastAppliedRemoteFp`，远端与上次应用版本相同且本地未变时直接判 in-sync。
+- 修法：1) `applyRemoteData()` 写入 `userSettings` 前剔除等于 `µb.userSettingsDefault` 的项；
+  2) 新增 `syncState.lastAppliedRemoteFp`，远端与上次应用版本相同且本地未变时直接判 in-sync。
 - 验证：Firefox 159 `boot → dir=pull → boot → dir=none`，云端 `deviceName` 保持对端值未被回写；
   百分 150 pull 后云端同样未被覆盖，本地规则正确应用。
 
@@ -750,6 +763,20 @@ N1 覆盖的是一个**会丢配置**的缺陷：设置页不回填密码，所�
 - 结论：Firefox 扩展的 **UI 交互无法用 WebDriver 自动化**。改用「带日志钩子的同源构建」：
   在背景脚本里加一段仅测试用的自配置 + `fetch('http://127.0.0.1:8088/log/<msg>')` 回传，
   结果从 WebDAV 访问日志里读回来。同步引擎代码与发布版一致，只多了这个钩子。
+
+### 17.2b 扩展页的打开与脚本注入（2026-11-03 补充实测）
+
+- **扩展 UUID**：在 `<profile>/prefs.js` 的 `extensions.webextensions.uuids` 里，
+  按 **gecko id**（本 fork 是 `uBlock0@raymondhill.net`，不是 Chromium 那边的 `key` 推导 id）查。
+  装到同一 profile 会复用该 UUID。
+- **打开设置页**：`web-ext run --start-url moz-extension://<uuid>/settings.html` 可以，
+  前提是 profile 里已有该 UUID 映射；**且要先删掉 `sessionstore.jsonlz4`**，
+  否则会话恢复会把 start-url 顶掉（表现为只剩 `about:blank`）。
+- **脚本注入**：BiDi `script.evaluate` 打在扩展页上会要求
+  `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1`；但通过 web-ext 启动时该变量没传进 Firefox 进程，仍然报
+  `System access is required`。`browsingContext.navigate/reload` 到 `moz-extension://` 一律 `unsupported operation`。
+- **鼠标**：`PostMessage(WM_LBUTTONDOWN)` 打不进 Firefox 内容区（点了没反应），
+  但 `PostMessage(WM_KEYDOWN, VK_NEXT)` 能滚动页面——所以截图核对可行，点击/输入不行。
 
 ### 17.3 结果
 
