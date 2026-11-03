@@ -439,6 +439,11 @@ const fingerprintLocalData = function(data) {
 let syncState = {
     lastEtag: '',            // ETag of remote file as of last sync
     lastLocalFingerprint: '',// fingerprint captured at last successful sync
+    lastAppliedRemoteFp: '', // fingerprint of the remote snapshot we applied
+                             // last. If the remote is still byte-identical and
+                             // local has not changed, there is nothing to do --
+                             // pulling again would only restart the extension
+                             // for nothing.
     lastSyncTime: 0,
     lastError: '',
     lastDirection: '',       // 'push' | 'pull' | 'none'
@@ -611,6 +616,25 @@ const runSyncOnceLocked = async function( ) {
         return 'in-sync';
     }
 
+    // 4-early. The remote is exactly the snapshot we applied last time and
+    // nothing changed locally since: done. Without this, a pull whose local
+    // re-read differs in any way from the remote payload (normalisation, a
+    // field the engines rewrite on load) looks like "remote has changes we do
+    // not have" and triggers a second pull plus another extension restart on
+    // every startup.
+    if (
+        localDirty === false &&
+        syncState.lastAppliedRemoteFp !== '' &&
+        remoteFp === syncState.lastAppliedRemoteFp
+    ) {
+        syncState.lastSyncTime = Date.now();
+        syncState.lastError = '';
+        syncState.lastDirection = 'none';
+        saveSyncState();
+        updateBadge();
+        return 'in-sync';
+    }
+
     // A device that has never recorded a sync cannot know whether it is
     // joining an existing group (pull) or publishing its own setup (push).
     // Anything it has customised by hand is treated as "worth asking about";
@@ -695,6 +719,7 @@ const runSyncOnceLocked = async function( ) {
         const localNow = await collectLocalData();
         syncState.lastEtag = remote.etag || '';
         syncState.lastLocalFingerprint = fingerprintLocalData(localNow);
+        syncState.lastAppliedRemoteFp = remoteFp;
         syncState.lastSyncTime = Date.now();
         syncState.lastDirection = 'pull';
         syncState.lastError = '';
@@ -788,7 +813,18 @@ const applyRemoteData = async function(data) {
         }
     }
 
-    await attempt('user-settings', ( ) => vAPI.storage.set(Object.assign({}, data.userSettings || {}, {
+    // Drop settings that equal uBO's defaults before writing: collectLocalData()
+    // only reports modified settings, so keeping defaults in storage makes the
+    // fingerprint after the reload differ from the one recorded now -- the next
+    // run then thinks the user edited something and pushes the remote back.
+    const userSettings = Object.assign({}, data.userSettings || {});
+    for ( const key of Object.keys(userSettings) ) {
+        if ( key in µb.userSettingsDefault && userSettings[key] === µb.userSettingsDefault[key] ) {
+            delete userSettings[key];
+        }
+    }
+
+    await attempt('user-settings', ( ) => vAPI.storage.set(Object.assign({}, userSettings, {
         hiddenSettings,
         netWhitelist: whitelist || [],
         dynamicFilteringString: data.dynamicFilteringString || '',
@@ -975,6 +1011,7 @@ const davSync = {
             const localNow = await collectLocalData();
             syncState.lastEtag = remote.etag || '';
             syncState.lastLocalFingerprint = fingerprintLocalData(localNow);
+            syncState.lastAppliedRemoteFp = fingerprintLocalData(remoteData);
             syncState.lastSyncTime = Date.now();
             syncState.lastDirection = 'pull';
             syncState.lastError = '';
