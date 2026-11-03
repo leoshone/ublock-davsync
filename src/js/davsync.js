@@ -929,6 +929,8 @@ const davSync = {
             deviceName: config.deviceName,
             // 留空时会用的名字（与当前是否已填无关），设置页拿它做 placeholder
             platformDeviceName: defaultDeviceName(),
+            // 只告诉页面「有没有存密码」，明文不下发
+            hasPassword: config.password !== '',
             syncIntervalMinutes: config.syncIntervalMinutes,
             lastSyncTime: syncState.lastSyncTime,
             lastError: err,

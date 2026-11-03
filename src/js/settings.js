@@ -347,6 +347,14 @@ let davSyncSaved = {
     syncIntervalMinutes: 30,
 };
 
+// 已保存密码时输入框里放的占位掩码：真实密码不下发到页面，但空着会让人
+// 以为没保存。输入框本身是 type=password，所以这里放什么都会被渲染成圆点，
+// 内容不会被提交（只有 passwordDirty 为真时才发送该字段）。
+const DAV_PWD_MASK = '••••••••';
+
+let davSyncHasPassword = false;   // 后台是否已存密码（明文不下发）
+let davSyncPwdMasked = false;     // 输入框当前显示的只是掩码，不是用户输入
+
 const davSyncReadForm = function() {
     const interval = parseFloat(qs$('#davSyncInterval').value);
     return {
@@ -434,6 +442,15 @@ const refreshDavStatus = function(status) {
     }
     // 记录已保存快照（密码不入库不下发：输入框保留用户输入，
     // 仅当用户再次修改时才算有变更）
+    // 已保存过密码时显示掩码，避免「看起来没填」
+    const pwdEl = qs$('#davSyncPassword');
+    const hasPassword = status.hasPassword === true;
+    davSyncHasPassword = hasPassword;
+    if ( hasPassword === true && pwdEl.value === '' ) {
+        pwdEl.value = DAV_PWD_MASK;
+        davSyncPwdMasked = true;
+    }
+
     davSyncSaved = {
         enabled: status.enabled === true,
         url: status.url || '',
@@ -506,11 +523,30 @@ vAPI.messaging.send('dashboard', { what: 'davSyncGetStatus' }).then(status => {
 
 for ( const sel of [ '#davSyncEnabled', ...davSyncFields ] ) {
     dom.on(sel, 'input', ( ) => {
-        if ( sel === '#davSyncPassword' ) { davSyncSaved.passwordDirty = true; }
+        if ( sel === '#davSyncPassword' ) {
+            davSyncSaved.passwordDirty = true;
+            davSyncPwdMasked = false;
+        }
         davSyncUpdateUI();
     });
     dom.on(sel, 'change', ( ) => { davSyncUpdateUI(); });
 }
+
+// 掩码只是「已保存」的视觉提示：聚焦时清空，让用户直接输入新密码；
+// 失焦且什么都没输入时再放回掩码。
+dom.on('#davSyncPassword', 'focus', ( ) => {
+    if ( davSyncPwdMasked !== true ) { return; }
+    qs$('#davSyncPassword').value = '';
+    davSyncPwdMasked = false;
+});
+dom.on('#davSyncPassword', 'blur', ( ) => {
+    const el = qs$('#davSyncPassword');
+    if ( el.value !== '' ) { return; }
+    if ( davSyncSaved.passwordDirty === true ) { return; }
+    if ( davSyncHasPassword !== true ) { return; }
+    el.value = DAV_PWD_MASK;
+    davSyncPwdMasked = true;
+});
 
 dom.on('#davSyncSave', 'click', ( ) => {
     const cfg = davSyncReadForm();
