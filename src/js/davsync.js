@@ -97,6 +97,34 @@ const errorSeverity = function(err) {
 // forever, even though the sync had already finished, and every later click
 // failed with a dead messaging port. Answer first, reload on the next tick.
 
+
+/******************************************************************************/
+// Pull has to reload the extension, and `browser.runtime.reload()` closes the
+// extension's own pages -- the settings pane the user just clicked in vanishes,
+// which looked like a crash. When the reload was requested *by* that pane,
+// remember it and reopen the pane from the fresh instance.
+// Only user-triggered pulls set the flag; startup/alarm syncs never do, so no
+// tab pops up on its own.
+
+const REOPEN_PANE_KEY = 'davSyncReopenPane';
+
+const markReopenPane = async function( ) {
+    try {
+        await vAPI.storage.set({ [REOPEN_PANE_KEY]: true });
+    } catch {
+    }
+};
+
+const reopenPaneIfRequested = async function( ) {
+    try {
+        const bin = await vAPI.storage.get(REOPEN_PANE_KEY);
+        if ( bin[REOPEN_PANE_KEY] !== true ) { return; }
+        await vAPI.storage.remove(REOPEN_PANE_KEY);
+        vAPI.tabs.open({ url: 'dashboard.html#settings.html' });
+    } catch {
+    }
+};
+
 let restartTimer = 0;
 
 const deferRestart = function( ) {
@@ -984,7 +1012,10 @@ const davSync = {
             syncState.lastError = '';
             saveSyncState();
             updateBadge();
-            // Same reasoning as syncNow(): reply first, reload later.
+            // Same reasoning as syncNow(): reply first, reload later. The pane
+            // that asked for this is about to be closed by the reload, so ask
+            // the next instance to reopen it.
+            await markReopenPane();
             deferRestart();
             return this.getStatus();
         }
@@ -1015,6 +1046,7 @@ const davSync = {
         // reload; schedule that *after* this reply is delivered (see
         // deferRestart) instead of killing the sender mid-response.
         if ( status === 'pulled' ) {
+            await markReopenPane();
             deferRestart();
         }
         return this.getStatus();
@@ -1083,6 +1115,10 @@ configReady.then(( ) => {
 });
 
 /******************************************************************************/
+
+// The previous instance was reloaded because the user pulled from the settings
+// pane; put that pane back once the new instance is up.
+setTimeout(( ) => { reopenPaneIfRequested(); }, 300);
 
 export default davSync;
 

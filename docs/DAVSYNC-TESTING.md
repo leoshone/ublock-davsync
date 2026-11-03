@@ -640,6 +640,26 @@ N1 覆盖的是一个**会丢配置**的缺陷：设置页不回填密码，所�
 
 另外：冲突时状态行不再重复横幅内容（返回空字符串，整行隐藏）；备份文件名从正文挪到 `title` 提示，避免在窄屏被断行成 `ublock-` / `backup.conflict-*.json`。
 
+补充（1.75.1.113）：冲突点「下载」后设置页自动关闭
+- 现象：点「下载」后配置页 1 秒内消失。根因是 `vAPI.app.restart()` 就等于
+  `browser.runtime.reload()`，扩展重载会关掉它自己的所有页面——不是崩溃，是必然行为。
+- 修法：用户触发的 pull（`syncNow()` 返回 `pulled`、`resolveConflict('pull')`）在重载前
+  写一个 `davSyncReopenPane` 标记；新实例启动 300ms 后读标记并
+  `vAPI.tabs.open('dashboard.html#settings.html')`，把设置页开回来（前台）。
+  只在用户主动点按钮时置位，启动/定时同步不会凭空弹标签页。
+- 实测（百分 150）：t+1s 页面关闭 → t+4s 自动回到 `dashboard.html#settings.html`，
+  拉取的数据已生效（本地规则 = 云端内容）。剩下的 3 秒是扩展重载本身的启动时间，无法再缩短。
+
+补充（1.75.1.113）：冲突点「下载」后设置页自动关闭
+- 现象：点「下载」后配置页 1 秒内消失。根因是 `vAPI.app.restart()` 就等于
+  `browser.runtime.reload()`，扩展重载会关掉它自己的所有页面——不是崩溃，是必然行为。
+- 修法：用户触发的 pull（`syncNow()` 返回 `pulled`、`resolveConflict('pull')`）在重载前
+  写一个 `davSyncReopenPane` 标记；新实例启动 300ms 后读标记并
+  `vAPI.tabs.open('dashboard.html#settings.html')`，把设置页开回来（前台）。
+  只在用户主动点按钮时置位，启动/定时同步不会凭空弹标签页。
+- 实测（百分 150）：t+1s 页面关闭 → t+4s 自动回到 `dashboard.html#settings.html`，
+  拉取的数据已生效（本地规则 = 云端内容）。剩下的 3 秒是扩展重载本身的启动时间，无法再缩短。
+
 补充（1.75.1.112）：设备名留空的兜底
 - 原文案「留空则使用平台名」其实**名不副实**：代码里没有任何平台名来源，留空就是空串，
   对方设备的冲突横幅只会显示「未知设备」。
