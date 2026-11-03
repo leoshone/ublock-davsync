@@ -8,9 +8,10 @@
 
 1. **以后永远 fork 上游正式 release，不跟 beta**（正式版经完整验证且与商店版本对照一致）。
 2. **版本号 = `<fork 基线版本>.<100 + DavSync 迭代号>`**：
-   - 当前 `1.75.1.101` = 基于上游 1.75.1 beta 线（1.75.1b16+3 提交，commit 1e6f82b）的第 1 次 DavSync 迭代；
+   - 当前 `1.75.4.101` = 基于上游 1.75.4 正式版（2026-11-03 merge，含元素拾取器 secret-token 安全加固）的第 1 次 DavSync 迭代；
    - 第 4 段 ≥101 即 DavSync 迭代（上游 beta 序号 ≤99，空间隔离不撞车）；
-   - 上游出新正式版（如 1.76.0）→ rebase 上游新 tag，版本号变 `1.76.0.101` 重新计数；
+   - 上游出新正式版（如 1.76.0）→ merge 上游新 tag，版本号变 `1.76.0.101` 重新计数；
+   - 历史基线：1.75.1.101–1.75.1.122 基于 1.75.1 beta 线（1.75.1b16+3，commit 1e6f82b）——当时 1.75.1 尚未出正式版，属既成事实；122 之后 rebase 到正式版，此后基线均为正式 release；
 3. Chromium manifest version 最多 4 段、每段 ≤65535，禁止 5 段；
 4. 每次发版：`dist/version` 改新版本号 → `make-chromium-meta.py` → `make-packages.cjs` → Release（资产名 `uBlock0.davsync_v<版本>.<平台>.*`）→ GitHub Actions 自动更新 docs/update.xml。
 
