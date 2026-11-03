@@ -115,13 +115,19 @@ const markReopenPane = async function( ) {
     }
 };
 
+// 返回 true 表示「已处理完」（开了标签页，或本来就不需要开），false 表示这次没成、可以重试。
 const reopenPaneIfRequested = async function( ) {
     try {
         const bin = await vAPI.storage.get(REOPEN_PANE_KEY);
-        if ( bin[REOPEN_PANE_KEY] !== true ) { return; }
+        if ( bin[REOPEN_PANE_KEY] !== true ) { return true; }
+        if ( typeof vAPI.tabs !== 'object' || typeof vAPI.tabs.open !== 'function' ) {
+            return false;
+        }
         await vAPI.storage.remove(REOPEN_PANE_KEY);
         vAPI.tabs.open({ url: 'dashboard.html#settings.html' });
+        return true;
     } catch {
+        return false;
     }
 };
 
@@ -1133,7 +1139,14 @@ configReady.then(( ) => {
 
 // The previous instance was reloaded because the user pulled from the settings
 // pane; put that pane back once the new instance is up.
-setTimeout(( ) => { reopenPaneIfRequested(); }, 300);
+// 扩展重载后尽快把设置页开回来：越早开，用户看到的「空窗」越短。
+// vAPI 偶尔还没就绪，所以失败时短退避重试几次（总计约 0.5 秒）。
+( async ( ) => {
+    for ( let i = 0; i < 5; i++ ) {
+        if ( await reopenPaneIfRequested() ) { return; }
+        await new Promise(resolve => { setTimeout(resolve, 120); });
+    }
+})( );
 
 export default davSync;
 
