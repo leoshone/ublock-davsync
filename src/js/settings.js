@@ -447,6 +447,15 @@ const davStatusText = status => {
     return `${dir} · ${t}`;
 };
 
+// syncNow 动作的即时反馈：云端数据刚刚应用（热应用不重启，页面不刷新，
+// 用户需要一条明确的「数据已下来」提示——仅作用于本次回复，不落状态行）。
+const davAppliedNowText = status => {
+    if ( status.appliedNow !== true ) { return ''; }
+    return status.pendingRestart === true
+        ? '已从云端应用，扩展正在重新加载…'
+        : '已从云端应用（实时生效）';
+};
+
 const refreshDavStatus = function(status) {
     qs$('#davSyncEnabled').checked = status.enabled === true;
     qs$('#davSyncUrl').value = status.url || '';
@@ -526,6 +535,11 @@ const davSyncRunAction = function(payload, pendingText) {
             // 云端数据已应用，扩展马上重新加载；刷新一次让本页重新连上新实例。
             davSyncSetStatus('已从云端应用，扩展正在重新加载…');
             setTimeout(( ) => { location.reload(); }, 1600);
+        } else {
+            // 热应用成功（或确实无变化）：给一条即时反馈。热应用不重启、
+            // 页面不刷新，没有这条用户无法确认「数据是否真的下来了」。
+            const applied = davAppliedNowText(result);
+            if ( applied !== '' ) { davSyncSetStatus(applied); }
         }
     }).catch(( ) => {
         clearTimeout(guard);

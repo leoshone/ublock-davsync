@@ -717,9 +717,11 @@ const runSyncOnceLocked = async function( ) {
     if ( remoteSameAsLocal && localDirty === false ) {
         syncState.lastSyncTime = Date.now();
         syncState.lastError = '';
-        // Explicit: without this the pane keeps showing the previous
-        // direction (e.g. 'pull' from a previous session) forever.
-        syncState.lastDirection = 'none';
+        // lastDirection is intentionally NOT touched: it means "direction of
+        // the last actual data transfer". An in-sync check is not a transfer
+        // -- overwriting it here made the pane show 无变化 right after a
+        // successful first pull on a fresh device (the check-that-follows
+        // erased the evidence).
         saveSyncState();
         updateBadge();
         return 'in-sync';
@@ -738,7 +740,7 @@ const runSyncOnceLocked = async function( ) {
     ) {
         syncState.lastSyncTime = Date.now();
         syncState.lastError = '';
-        syncState.lastDirection = 'none';
+        // No dir write: same reasoning as step 4 above.
         saveSyncState();
         updateBadge();
         return 'in-sync';
@@ -874,7 +876,7 @@ const runSyncOnceLocked = async function( ) {
     syncState.lastAppliedRemoteFp = remoteFp;
     syncState.lastSyncTime = Date.now();
     syncState.lastError = '';
-    syncState.lastDirection = 'none';
+    // No dir write: bookkeeping refresh is not a transfer (see step 4).
     syncState.conflict = false;
     syncState.conflictRemoteMeta = null;
     saveSyncState();
@@ -1287,7 +1289,12 @@ const davSync = {
             await markReopenPane();
             deferRestart();
         }
-        return this.getStatus();
+        // Surface the hot-apply outcome to THIS reply so the pane can show a
+        // positive "data applied" message even though lastDirection will
+        // keep reading 'pull' on later in-sync checks (it is never reset).
+        this._lastSyncResult = status;
+        return Object.assign(await this.getStatus(),
+            { appliedNow: status === 'pulled-hot' || status === 'pulled' });
     },
 
     // Called from ublock.js when user settings change (hook below).
