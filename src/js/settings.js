@@ -368,8 +368,9 @@ const davSyncReadForm = function() {
 };
 
 // 配置是否完整（启用同步所需的最低要求）
+// 设备名称必填：云端靠它区分数据来源，空名字会让其他设备看到「未知设备」。
 const davSyncConfigComplete = function(cfg) {
-    return cfg.url !== '' && cfg.username !== '';
+    return cfg.url !== '' && cfg.username !== '' && cfg.deviceName !== '';
 };
 
 // 表单相对已保存快照是否有变化
@@ -432,11 +433,6 @@ const refreshDavStatus = function(status) {
     qs$('#davSyncUsername').value = status.username || '';
     // 密码不回填（服务端不下发），保持输入框为空
     qs$('#davSyncDeviceName').value = status.deviceName || '';
-    // 留空时后台会用 UA 推导出的名字（如「Chrome · Windows」），直接把它写进提示，
-    // 免得用户以为「平台名」是浏览器里某个可配置的东西。
-    qs$('#davSyncDeviceName').placeholder = status.platformDeviceName
-        ? `留空则使用「${status.platformDeviceName}」`
-        : '留空则使用平台名';
     if ( typeof status.syncIntervalMinutes === 'number' ) {
         qs$('#davSyncInterval').value = status.syncIntervalMinutes;
     }
@@ -550,6 +546,11 @@ dom.on('#davSyncPassword', 'blur', ( ) => {
 
 dom.on('#davSyncSave', 'click', ( ) => {
     const cfg = davSyncReadForm();
+    if ( cfg.enabled && cfg.deviceName === '' ) {
+        davSyncSetStatus('请先填写设备名称（云端靠它区分不同设备的数据）');
+        qs$('#davSyncDeviceName').focus();
+        return;
+    }
     const payload = {
         what: 'davSyncSetConfig',
         enabled: qs$('#davSyncEnabled').checked,

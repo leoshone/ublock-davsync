@@ -140,38 +140,6 @@ const isRestartPending = function( ) {
 };
 
 
-/******************************************************************************/
-// Device name fallback.
-//
-// The browser exposes no "platform name" of its own, so when the user leaves
-// the field empty we used to send an empty string -- every other device then
-// showed 「未知设备」 in the conflict banner. Derive a short readable label
-// from the UA instead: "Chrome · Windows", "Kiwi · Android", ...
-
-const defaultDeviceName = ( function( ) {
-    let cached = '';
-    return function( ) {
-        if ( cached !== '' ) { return cached; }
-        const ua = typeof navigator === 'object' && typeof navigator.userAgent === 'string'
-            ? navigator.userAgent : '';
-        let browser = '';
-        if ( /Edg\//.test(ua) ) { browser = 'Edge'; }
-        else if ( /OPR\//.test(ua) ) { browser = 'Opera'; }
-        else if ( /Firefox\//.test(ua) ) { browser = 'Firefox'; }
-        else if ( /Kiwi/.test(ua) ) { browser = 'Kiwi'; }
-        else if ( /Chrome\//.test(ua) ) { browser = 'Chrome'; }
-        else if ( /Safari\//.test(ua) ) { browser = 'Safari'; }
-        let platform = '';
-        if ( /Android/.test(ua) ) { platform = 'Android'; }
-        else if ( /Windows/.test(ua) ) { platform = 'Windows'; }
-        else if ( /iPhone|iPad|iPod/.test(ua) ) { platform = 'iOS'; }
-        else if ( /Mac OS X|Macintosh/.test(ua) ) { platform = 'macOS'; }
-        else if ( /Linux/.test(ua) ) { platform = 'Linux'; }
-        cached = [ browser, platform ].filter(Boolean).join(' · ') || 'uBO DavSync';
-        return cached;
-    };
-})();
-
 const updateBadge = function() {
     // conflict state takes precedence over plain errors
     if ( syncState.conflict === true ) {
@@ -372,7 +340,7 @@ const davLockAcquire = async function(config) {
     const put = await davRequest(config, 'PUT', lockPath, {
         body: JSON.stringify({
             timeStamp: Date.now(),
-            deviceName: config.deviceName || defaultDeviceName(),
+            deviceName: config.deviceName || '',
         }, null, 1),
     });
     if ( put.ok === false ) {
@@ -435,7 +403,7 @@ const collectLocalData = async function( ) {
 
     return {
         timeStamp: Date.now(),
-        deviceName: config.deviceName || defaultDeviceName(),
+        deviceName: config.deviceName || '',
         userSettings: µb.getModifiedSettings(
             µb.userSettings,
             µb.userSettingsDefault
@@ -927,8 +895,6 @@ const davSync = {
             username: config.username,
             filePath: config.filePath,
             deviceName: config.deviceName,
-            // 留空时会用的名字（与当前是否已填无关），设置页拿它做 placeholder
-            platformDeviceName: defaultDeviceName(),
             // 只告诉页面「有没有存密码」，明文不下发
             hasPassword: config.password !== '',
             syncIntervalMinutes: config.syncIntervalMinutes,
