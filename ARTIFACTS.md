@@ -55,6 +55,16 @@
 | `ublock-sideload.py` | Chrome 137+ 未打包扩展自动化加载（UIA + SendInput + WM_SETTEXT） |
 | `dav-e2e.py`（master `scripts/` 与 artifacts `scripts/` 各一份） | CDP E2E 同步测试骨架：注入配置 → 触发 → 轮询 state → 判定 PASS/FAIL |
 
+## _tmp/ 测试脚手架（v1.75.1.122 起长期复用，不入库但可随时重建）
+
+| 文件 | 说明 |
+|---|---|
+| `_tmp/webdav.py` | 本地 WebDAV 测试服务（8088，davtest/davtest123，纯标准库；If-Match 412 / 无鉴权 /log 回传口） |
+| `_tmp/webdav-test.py` | 服务自测（14 项动词/状态码断言） |
+| `_tmp/scaffold.py` | 测试脚手架：干净 profile + Preferences 补丁 + createTarget 显式开设置页 + 断言工具；`python _tmp/scaffold.py` 跑三关自检 |
+| `_tmp/acceptance.py` | 计划 §3 验收表 Chromium 用例 1-7（21 断言），`python _tmp/acceptance.py all` |
+| `_tmp/case8-firefox.py` | 用例 8：Firefox 日志钩子构建 + web-ext 三会话（push/pull/none）自动判定 |
+
 ## 重建命令（换电脑后从源码重构建）
 
 ```bash

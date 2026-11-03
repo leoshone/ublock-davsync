@@ -913,6 +913,59 @@ grep -o "/log/[^ ]*" webdav.log | python -c "import sys,urllib.parse;[print(urll
 
 判定「拉取后是否回弹」：先跑一次让它 push，改云端文件后再重启 Firefox，
 日志应为 `boot → dir=pull → boot → dir=none`（119 之后的行为）。
+122 起 pull 默认走**热应用**（无 hiddenSettings 差异时不重启），日志变为
+`boot → dir=pull`（单次 boot，热应用后无回弹）；下次 boot 为 `dir=none`。
+`_tmp/case8-firefox.py` 已把这条链路脚本化（push / pull / none 三会话自动判定）。
 
 截图核对 UI（无法注入脚本时的兜底）：用 `PrintWindow` 抓窗口位图存 PNG，
 再用 `PostMessage(WM_KEYDOWN, VK_NEXT)` 向下翻页——鼠标事件打不进内容区。
+
+## 18. 热应用落地（v1.75.1.122，2026-11-03）
+
+计划文档 `DAVSYNC-HOTAPPLY-PLAN.md` 的实施记录。三轮自检 + 全量验收通过后发版。
+
+### 18.1 改了什么（src/js/davsync.js）
+
+1. **指纹归一化**：`fingerprintLocalData` → `fingerprintData`（async，需默认值表）。
+   userSettings 与默认值**深比较**后剔除（`[] !== []` 恒真的坑）、行类字段
+   trim + 去空 + 排序、userFilters 保序、**hiddenSettings 差异纳入指纹**
+   （缺了它，对端改高级设置会被 4-early 判成 in-sync 永远拉不到）。
+2. **热应用 `applyRemoteDataHot`**：hiddenSettings 差异 → return false 走重启；
+   否则 changeUserSettings / fromString+save 系列 / saveUserFilters /
+   saveSelectedFilterLists+loadFilterLists 原地应用，return true。
+3. **调用方**：pull 路径先热应用；返回值 `'pulled-hot'`（不重启）/
+   `'pulled'`（重启），syncNow / 闹钟 / 启动同步三处只对 `'pulled'` 重启。
+   `lastDirection` 仍写 `'pull'`（状态文案「已从云端应用」两态共用）。
+4. **同设备锁接管**：锁的 deviceName 与本机相同且未过期 → 视为上次实例
+   中途死亡（pull 重启会 kill 掉持锁中的 bg）留下的残锁，直接接管。
+   此前这类残锁会 `locked-by-other-device` 卡满 5 分钟 TTL。
+5. **in-sync 分支补 `lastDirection='none'`**：step 4 / step 7 原本不写，
+   状态行会一直停留上一次的「已从云端应用」（Firefox case8-C 实测暴露）。
+
+### 18.2 验收（_tmp/acceptance.py，Chromium 全绿 21 断言；case8 脚本化全绿）
+
+| # | 用例 | 结果 |
+|---|---|---|
+| 1 | 远端改动（含 importedLists 噪声）→ 同步 | 页面存活、dir=pull、无重启 ✅ |
+| 2 | 20s 后再同步 | 无「已上传」，云端 deviceName 保持对端 ✅ |
+| 3 | 设置 / 白名单 / 动态规则 | 与远端一致 ✅ |
+| 4 | 过滤引擎 | netFilterCount 684596 → 720318（真实重建）✅ |
+| 5 | 本地改动 → 同步 | dir=push、无冲突、云端有新条目 ✅ |
+| 6 | 双端改动 → 同步 | conflict=true + 横幅可见 ✅ |
+| 7 | 远端改 hiddenSettings → 重启路径 | dir=pull + 重启后数据正确 + 页面可重开 ✅ |
+| 8 | Firefox（日志钩子构建） | A: push；B: pull 热应用无回弹；C(同 profile): dir=none，云端未被覆盖 ✅ |
+
+### 18.3 踩坑（脚手架层，已固化在 _tmp/scaffold.py）
+
+- Cent 150 CDP 要求消息 `id` 为**整数**，字符串 id 不回包（表现为 recv 超时）；
+- `Target.createTarget` 后导航异步，立刻 evaluate 读到 about:blank，需轮询；
+- chrome.exe fork 后 terminate 杀不干净，残留实例占调试端口静默吞连接，
+  `taskkill /F /T` + 启动前按端口 netstat 清理；
+- uBO 首次启动会自重启一次（`start.js` lastVersionInt===0），过早开的设置页
+  会被连带关闭——启动后需等 ~20s 再开页面；
+- 设置页保存按钮依赖初始 `davSyncGetStatus` 回包填充 davSyncSaved，开页后
+  需等状态行渲染再填表单；
+- Runtime.evaluate 里 `import('./x.js')` 相对的是 **document base** 不是模块
+  URL，测试脚本要用 `/js/` 前缀绝对路径；
+- 本地 WebDAV 测试服务的 `/log/<msg>` 回传口不能要求鉴权（钩子 fetch 不带
+  凭据），否则日志静默丢失。

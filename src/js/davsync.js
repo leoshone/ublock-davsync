@@ -334,13 +334,26 @@ const davLockAcquire = async function(config) {
         return { ok: false, error: existing.error, contended: false };
     }
     if ( existing.notFound !== true ) {
+        let info = {};
         try {
-            const info = JSON.parse(existing.text);
-            if ( Date.now() - (info.timeStamp || 0) < LOCK_TTL_MS ) {
-                return { ok: false, error: 'locked-by-other-device', contended: true };
-            }
+            info = JSON.parse(existing.text);
         } catch {
             // Unparseable lock: treat as stale and take over.
+        }
+        if ( Date.now() - (info.timeStamp || 0) < LOCK_TTL_MS ) {
+            // Same-device fresh lock = OUR OWN leftover from a previous
+            // instance that died mid-sync (extension restarts are the
+            // normal case: pull => vAPI.app.reload() can land between
+            // acquire and the awaited release if the browser kills the bg
+            // first). Concurrent syncs on one device are already
+            // serialized by the single background page, so taking over is
+            // safe; a different deviceName is a genuinely busy peer.
+            if ( (info.deviceName || '') !== '' &&
+                info.deviceName === (config.deviceName || '') ) {
+                // fall through: overwrite with a fresh lock of our own.
+            } else {
+                return { ok: false, error: 'locked-by-other-device', contended: true };
+            }
         }
     }
     const put = await davRequest(config, 'PUT', lockPath, {
@@ -427,16 +440,102 @@ const collectLocalData = async function( ) {
 // Filter-list *contents* are not fingerprinted (they auto-update on their
 // own schedule on every device; only the selection matters, which is
 // covered by selectedFilterLists).
-const fingerprintLocalData = function(data) {
+//
+// Normalisation is what makes the fingerprint comparable across ends:
+// the local snapshot (collectLocalData) and the cloud payload are shaped
+// differently even when they carry the same content --
+//   - uBO only reports settings that DIFFER from defaults, but a shallow
+//     `!==` marks `importedLists: []` as "modified" ([] !== [] is always
+//     true), so cloud payloads carry default-looking entries the local
+//     read never has;
+//   - whitelist is an array locally and may be newline-joined remotely;
+//   - rule/list line order is not semantic except for userFilters.
+// Without normalising, the same content hashes two ways and every pull is
+// followed by a spurious push that overwrites the cloud copy (the root
+// cause of the wasted round-trips in versions 118/119).
+//
+// Async because userSettings normalisation needs uBO's defaults table
+// (lives in background.js; importing at module top level would create a
+// load-order cycle). All former fingerprintLocalData() call sites now use
+// this; the plain form is gone so nobody can accidentally skip the step.
+const fingerprintData = async function(data) {
+    // Line-oriented fields: trim each line, drop empties. Sorting is safe
+    // for everything EXCEPT userFilters (order is preserved there: it is
+    // the only field where reordering counts as a real user edit).
+    const normalizedLines = (value, sort = true) => {
+        const lines = (Array.isArray(value) ? value : String(value || '').split('\n'))
+            .map(line => line.trim())
+            .filter(line => line !== '');
+        return (sort ? lines.sort() : lines).join('\n');
+    };
+    const userSettings = await normalizeUserSettings(data.userSettings);
+    const hiddenSettings = await normalizeHiddenSettings(data);
     return [
-        JSON.stringify(data.userSettings || {}),
-        JSON.stringify(data.selectedFilterLists || []),
-        data.whitelist || '',
-        data.dynamicFilteringString || '',
-        data.urlFilteringString || '',
-        data.hostnameSwitchesString || '',
-        (data.userFilters || []).join('\n'),
+        JSON.stringify(userSettings),
+        JSON.stringify((data.selectedFilterLists || []).slice().sort()),
+        normalizedLines(data.whitelist),
+        normalizedLines(data.dynamicFilteringString),
+        normalizedLines(data.urlFilteringString),
+        normalizedLines(data.hostnameSwitchesString),
+        normalizedLines(data.userFilters, false),
+        JSON.stringify(hiddenSettings),
     ].join('\u0000');
+};
+
+// Advanced settings are user-relevant state too: a peer's hiddenSettings
+// change must be visible to the sync decision (otherwise the 4-early
+// shortcut reports in-sync and the change is never applied). Normalize to
+// "keys that differ from defaults", sorted, regardless of whether the
+// payload carries an object or a hiddenSettingsString.
+const normalizeHiddenSettings = async function(data) {
+    const µb = (await import('./background.js')).default;
+    let hs = data.hiddenSettings;
+    if ( hs instanceof Object === false ) {
+        hs = µb.hiddenSettingsFromString(data.hiddenSettingsString || '');
+    } else {
+        hs = Object.assign({}, µb.hiddenSettingsDefault, hs);
+    }
+    const out = {};
+    for ( const key of Object.keys(µb.hiddenSettingsDefault).sort() ) {
+        if ( hs[key] !== µb.hiddenSettingsDefault[key] ) {
+            out[key] = hs[key];
+        }
+    }
+    return out;
+};
+
+// Deep-compare userSettings against uBO's defaults: keep only entries whose
+// value genuinely differs. Used before fingerprinting so a payload carrying
+// `importedLists: []` (a default value uBO's shallow getModifiedSettings
+// misreports as user-modified) hashes like a clean local snapshot that does
+// not carry the key at all.
+const normalizeUserSettings = async function(userSettings) {
+    const µb = (await import('./background.js')).default;
+    const defaults = µb.userSettingsDefault;
+    const out = {};
+    for ( const key of Object.keys(userSettings || {}) ) {
+        const value = userSettings[key];
+        if ( Object.hasOwn(defaults, key) === false ) {
+            out[key] = value;
+            continue;
+        }
+        const dflt = defaults[key];
+        // Deep compare: both arrays -> element-wise; anything else -> JSON
+        // compare (setting values are primitives/arrays only).
+        const same =
+            Array.isArray(value) && Array.isArray(dflt)
+                ? value.length === dflt.length && value.every((v, i) => v === dflt[i])
+                : JSON.stringify(value) === JSON.stringify(dflt);
+        if ( same === false ) {
+            out[key] = value;
+        }
+    }
+    // Sort keys so key insertion order can not change the hash.
+    const sorted = {};
+    for ( const key of Object.keys(out).sort() ) {
+        sorted[key] = out[key];
+    }
+    return sorted;
 };
 
 /******************************************************************************/
@@ -576,7 +675,7 @@ const runSyncOnceLocked = async function( ) {
     }
 
     const local = await collectLocalData();
-    const localFp = fingerprintLocalData(local);
+    const localFp = await fingerprintData(local);
     const localDirty = localFp !== syncState.lastLocalFingerprint;
 
     // 2. Remote empty -> first push
@@ -609,7 +708,7 @@ const runSyncOnceLocked = async function( ) {
         return syncState.lastError;
     }
 
-    const remoteFp = fingerprintLocalData(remoteData);
+    const remoteFp = await fingerprintData(remoteData);
     const remoteSameAsLocal = remoteFp === localFp;
     const remoteMatchesLastEtag = remote.etag !== '' &&
         remote.etag === syncState.lastEtag;
@@ -618,6 +717,9 @@ const runSyncOnceLocked = async function( ) {
     if ( remoteSameAsLocal && localDirty === false ) {
         syncState.lastSyncTime = Date.now();
         syncState.lastError = '';
+        // Explicit: without this the pane keeps showing the previous
+        // direction (e.g. 'pull' from a previous session) forever.
+        syncState.lastDirection = 'none';
         saveSyncState();
         updateBadge();
         return 'in-sync';
@@ -717,31 +819,53 @@ const runSyncOnceLocked = async function( ) {
     //    (Safe: local was NOT dirty, or this device has never synced and
     //    carries nothing worth protecting, so nothing of ours is lost.)
     if ( remoteSameAsLocal === false && (localDirty === false || neverSynced) ) {
+        // Hot path first: keeps the dashboard open when the snapshot needs
+        // no restart (no hiddenSettings delta). Only a false here -- or a
+        // half-applied failure -- falls back to wipe + restart.
+        let hotApplied = false;
         try {
-            await applyRemoteData(remoteData);
+            hotApplied = await applyRemoteDataHot(remoteData);
         } catch ( reason ) {
-            // Half-applied restore: report it instead of claiming success.
-            // The engines must still reload -- storage is already partly
-            // rewritten, so running on stale in-memory data risks writing it
-            // back over the new state on the next save.
-            syncState.lastError = String(reason && reason.message || reason);
-            saveSyncState();
-            updateBadge();
-            deferRestart();
-            return syncState.lastError;
+            // Conservative path below will redo the whole apply; keep the
+            // reason around only as diagnostics.
+            syncState.lastError = `hot-apply: ${reason && reason.message || reason}`;
         }
+        if ( hotApplied === false ) {
+            try {
+                await applyRemoteData(remoteData);
+            } catch ( reason ) {
+                // Half-applied restore: report it instead of claiming success.
+                // The engines must still reload -- storage is already partly
+                // rewritten, so running on stale in-memory data risks writing
+                // it back over the new state on the next save.
+                syncState.lastError = String(reason && reason.message || reason);
+                saveSyncState();
+                updateBadge();
+                deferRestart();
+                return syncState.lastError;
+            }
+        }
+        // Bookkeeping note: after a hot apply the in-memory state IS the
+        // remote data (changeUserSettings/fromString write through), so the
+        // re-read converges with remoteFp by construction -- unlike the
+        // restart path, where the first re-read used to observe stale
+        // pre-apply memory (the 118 bug).
         const localNow = await collectLocalData();
         syncState.lastEtag = remote.etag || '';
-        syncState.lastLocalFingerprint = fingerprintLocalData(localNow);
+        syncState.lastLocalFingerprint = await fingerprintData(localNow);
         syncState.lastAppliedRemoteFp = remoteFp;
         syncState.lastSyncTime = Date.now();
+        // lastDirection stays 'pull' for UI text either way (the status map
+        // shows 已从云端应用 for both); the RETURN value is what callers
+        // branch on: 'pulled-hot' = applied in place, do not restart;
+        // 'pulled' = restart path was used.
         syncState.lastDirection = 'pull';
-        syncState.lastError = '';
+        syncState.lastError = hotApplied ? '' : syncState.lastError;
         syncState.conflict = false;
         syncState.conflictRemoteMeta = null;
         saveSyncState();
         updateBadge();
-        return 'pulled';
+        return hotApplied ? 'pulled-hot' : 'pulled';
     }
 
     // 7. Only fingerprint bookkeeping was stale
@@ -750,6 +874,7 @@ const runSyncOnceLocked = async function( ) {
     syncState.lastAppliedRemoteFp = remoteFp;
     syncState.lastSyncTime = Date.now();
     syncState.lastError = '';
+    syncState.lastDirection = 'none';
     syncState.conflict = false;
     syncState.conflictRemoteMeta = null;
     saveSyncState();
@@ -866,6 +991,96 @@ const applyRemoteData = async function(data) {
     if ( failures.length !== 0 ) {
         throw new Error(`apply-partial (${failures.join(' | ')})`);
     }
+};
+
+/******************************************************************************/
+// Hot apply: bring the running instance in line with the remote snapshot
+// WITHOUT restarting. Returns true when everything was applied in-place and
+// the caller must NOT reload; false when the snapshot needs the restart
+// path (applyRemoteData) instead.
+//
+// Deciding factor: hidden (advanced) settings. They are read once at
+// startup and several of them wire into engine/browser internals, so they
+// only take effect on a fresh instance. Everything else -- user settings,
+// whitelist, dynamic rules, user filters, list selection -- has a live
+// save+reload API used by the dashboard itself, which is what this path
+// calls. Wiping storage (applyRemoteData) is deliberately avoided: it
+// discards caches and is what forces the restart in the first place.
+const applyRemoteDataHot = async function(data) {
+    const µb = (await import('./background.js')).default;
+    const { permanentFirewall, permanentSwitches, permanentURLFiltering } =
+        await import('./filtering-engines.js');
+
+    // 0. hiddenSettings can only be applied by a restart. Compare the
+    // "keys that differ from defaults" set on both sides; any difference
+    // means the visible state would diverge from the cloud => bail out.
+    // A partial object payload (cloud stores only the modified keys) must
+    // be merged over the defaults first, or every missing key reads as
+    // undefined and falsely differs from the local value.
+    let remoteHidden = data.hiddenSettings;
+    if ( remoteHidden instanceof Object === false ) {
+        remoteHidden = µb.hiddenSettingsFromString(data.hiddenSettingsString || '');
+    } else {
+        remoteHidden = Object.assign({}, µb.hiddenSettingsDefault, remoteHidden);
+    }
+    const hiddenDiff = hs => {
+        const out = {};
+        for ( const key of Object.keys(µb.hiddenSettingsDefault) ) {
+            if ( hs[key] !== µb.hiddenSettingsDefault[key] ) { out[key] = hs[key]; }
+        }
+        return out;
+    };
+    const remoteHiddenDiff = hiddenDiff(remoteHidden);
+    const localHiddenDiff = hiddenDiff(µb.hiddenSettings);
+    if ( JSON.stringify(remoteHiddenDiff) !== JSON.stringify(localHiddenDiff) ) {
+        return false;
+    }
+
+    // 1. User settings: apply the remote values key by key; keys absent
+    // from the remote snapshot go back to their defaults. changeUserSettings
+    // only writes keys that exist and saves only on actual change.
+    const target = Object.assign({}, µb.userSettingsDefault, data.userSettings || {});
+    for ( const key of Object.keys(target) ) {
+        if ( Object.hasOwn(µb.userSettings, key) === false ) { continue; }
+        µb.changeUserSettings(key, target[key]);
+    }
+
+    // 2. Whitelist / dynamic rules / URL rules / hostname switches:
+    // fromString(text) with no `append` REPLACES the whole set, matching
+    // what the dashboard's own editors do; each save persists the new state.
+    const whitelist = Array.isArray(data.whitelist)
+        ? data.whitelist
+        : String(data.netWhitelist || '').split('\n');
+    µb.trustedSites.fromLines(whitelist);
+    µb.saveWhitelist();
+
+    permanentFirewall.fromString(data.dynamicFilteringString || '');
+    µb.savePermanentFirewallRules();
+
+    permanentURLFiltering.fromString(data.urlFilteringString || '');
+    µb.savePermanentURLFilteringRules();
+
+    permanentSwitches.fromString(data.hostnameSwitchesString || '');
+    µb.saveHostnameSwitches();
+
+    // 3. My filters: saveUserFilters takes the raw text and busts the
+    // compiled-list cache itself.
+    const userFilters = Array.isArray(data.userFilters)
+        ? data.userFilters.join('\n')
+        : String(data.userFilters || '');
+    await µb.saveUserFilters(userFilters);
+
+    // 4. Filter-list selection + engine rebuild. saveSelectedFilterLists
+    // prunes caches of dropped lists; loadFilterLists then reloads every
+    // selected list so netFilterCount reflects the new selection. Without
+    // the rebuild the hot-applied selection would never reach the network
+    // layer until some unrelated restart.
+    if ( Array.isArray(data.selectedFilterLists) ) {
+        await µb.saveSelectedFilterLists(data.selectedFilterLists);
+    }
+    await µb.loadFilterLists();
+
+    return true;
 };
 
 /******************************************************************************/
@@ -1025,8 +1240,8 @@ const davSync = {
             await applyRemoteData(remoteData);
             const localNow = await collectLocalData();
             syncState.lastEtag = remote.etag || '';
-            syncState.lastLocalFingerprint = fingerprintLocalData(localNow);
-            syncState.lastAppliedRemoteFp = fingerprintLocalData(remoteData);
+            syncState.lastLocalFingerprint = await fingerprintData(localNow);
+            syncState.lastAppliedRemoteFp = await fingerprintData(remoteData);
             syncState.lastSyncTime = Date.now();
             syncState.lastDirection = 'pull';
             syncState.lastError = '';
@@ -1046,8 +1261,8 @@ const davSync = {
         const put = await davPutVerified(config, JSON.stringify(local, null, 1));
         if ( put.ok === true ) {
             syncState.lastEtag = put.etag || '';
-            syncState.lastLocalFingerprint = fingerprintLocalData(local);
-            syncState.lastAppliedRemoteFp = fingerprintLocalData(local);
+            syncState.lastLocalFingerprint = await fingerprintData(local);
+            syncState.lastAppliedRemoteFp = await fingerprintData(local);
             syncState.lastSyncTime = Date.now();
             syncState.lastDirection = 'push';
             syncState.lastError = '';
@@ -1063,9 +1278,11 @@ const davSync = {
 
     async syncNow() {
         const status = await runSyncOnce();
-        // 'pulled' means remote data was applied and the extension has to
-        // reload; schedule that *after* this reply is delivered (see
-        // deferRestart) instead of killing the sender mid-response.
+        // 'pulled' means remote data was applied via the restart path and
+        // the extension has to reload; schedule that *after* this reply is
+        // delivered (see deferRestart) instead of killing the sender
+        // mid-response. 'pulled-hot' means the snapshot went in through the
+        // live APIs -- nothing to reload, the pane stays where it is.
         if ( status === 'pulled' ) {
             await markReopenPane();
             deferRestart();
@@ -1095,6 +1312,9 @@ const davSync = {
 vAPI.alarms.onAlarm.addListener(alarm => {
     if ( alarm.name !== SYNC_ALARM_NAME ) { return; }
     runSyncOnce().then(status => {
+        // Only the restart path ('pulled') reloads; 'pulled-hot' already
+        // applied the data in place -- restarting here would close the
+        // user's pages for nothing.
         if ( status === 'pulled' ) { vAPI.app.restart(); }
     });
 });
@@ -1122,6 +1342,8 @@ configReady.then(( ) => { schedulePeriodicSync(); });
 // ETag/fingerprint bookkeeping makes redundant attempts harmless no-ops.
 const startupSync = ( ) => {
     runSyncOnce().then(status => {
+        // Same split as the alarm listener: hot-applied snapshots do not
+        // need the restart.
         if ( status === 'pulled' ) { vAPI.app.restart(); }
     }).catch(reason => {
     });
