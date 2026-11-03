@@ -424,6 +424,11 @@ const refreshDavStatus = function(status) {
     qs$('#davSyncUsername').value = status.username || '';
     // 密码不回填（服务端不下发），保持输入框为空
     qs$('#davSyncDeviceName').value = status.deviceName || '';
+    // 留空时后台会用 UA 推导出的名字（如「Chrome · Windows」），直接把它写进提示，
+    // 免得用户以为「平台名」是浏览器里某个可配置的东西。
+    qs$('#davSyncDeviceName').placeholder = status.platformDeviceName
+        ? `留空则使用「${status.platformDeviceName}」`
+        : '留空则使用平台名';
     if ( typeof status.syncIntervalMinutes === 'number' ) {
         qs$('#davSyncInterval').value = status.syncIntervalMinutes;
     }
