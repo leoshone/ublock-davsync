@@ -654,3 +654,46 @@ N1 覆盖的是一个**会丢配置**的缺陷：设置页不回填密码，所�
 - 冲突按钮加 `max-width:16em`，避免桌面宽屏被拉成两个半屏大按钮。
 
 截图（1.75.1.108）：桌面 1100px 宽按钮并排，Kiwi（411px）自动堆叠，均无横向溢出。
+
+---
+
+## 17. Firefox 实测（2026-11-03，Firefox 159 x64 zh-CN）
+
+### 17.1 怎么装上去的
+
+- **正式版 Firefox 不接受未签名 xpi**：把 `uBlock0.davsync_*.firefox.xpi` 放进
+  `<profile>/extensions/<id>.xpi` 并设 `xpinstall.signatures.required=false` +
+  `extensions.autoDisableScopes=0`，启动后 `extensions.json` 里根本不会出现该附加组件（被丢弃）。
+  该 pref 只在 ESR/Developer Edition/Nightly 生效。
+- 可行做法：`web-ext run --source-dir dist/build/uBlock0.firefox --firefox <exe> --firefox-profile <dir>`
+  → 通过调试协议装成**临时附加组件**，Firefox 重启即失效。
+
+### 17.2 怎么驱动的（关键坑）
+
+- Firefox 暴露的是 **WebDriver BiDi**（`--remote-debugging-port=9223`，直接连
+  `ws://127.0.0.1:9223/session`，先发 `session.new`），不是 Chrome CDP；
+  `/json/version` 是 404。**同一时刻只允许 1 个活动会话**，脚本退出前必须 `session.end`，
+  否则下一次报 `Maximum number of active sessions`（只能重启浏览器）。
+- **BiDi 不允许导航到 `moz-extension://`**（`Navigation ... is not allowed in this context`），
+  扩展页因此无法用 WebDriver 打开；`about:debugging` 里的 `WebExtensionPolicy` 在 BiDi 内容上下文也拿不到。
+- 扩展 UUID 可以从 `<profile>/storage/default/moz-extension+++<uuid>` 目录名直接读出来
+  （比问浏览器简单）。
+- 结论：Firefox 扩展的 **UI 交互无法用 WebDriver 自动化**。改用「带日志钩子的同源构建」：
+  在背景脚本里加一段仅测试用的自配置 + `fetch('http://127.0.0.1:8088/log/<msg>')` 回传，
+  结果从 WebDAV 访问日志里读回来。同步引擎代码与发布版一致，只多了这个钩子。
+
+### 17.3 结果
+
+| 用例 | 结果 |
+|---|---|
+| 扩展载入、背景脚本启动 | ✅ |
+| 配置写入 storage（重启后仍在） | ✅ |
+| 首同步 push：云端生成 `deviceName=firefox-ff` | ✅ |
+| 云端改动后启动，pull 生效：本地规则变为 `["||ff-round2.com^"]` | ✅ |
+| 所有同步 `err=-`（无异常） | ✅ |
+
+**观察到的小问题（未修）**：pull 触发扩展重启后，新实例会**再 pull 一次**（两次间隔约 4.4 秒）。
+把该分支的 `saveSyncState()` 改成 `await` 后仍然复现，说明不是「状态没写完」，更像
+`applyRemoteData` 写进 uBO 存储的数据在重启后读回来与远端不完全一致，导致 `remoteSameAsLocal`
+仍为 false。第二次 pull 是幂等的、不会无限循环（每次启动最多两次），数据最终一致，
+但会多一次重启 + 一次网络往返。留待后续排查。
