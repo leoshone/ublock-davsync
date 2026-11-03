@@ -1287,8 +1287,12 @@ let pickerBootArgs;
 let pickerFramePort = null;
 
 const bootstrap = async ( ) => {
+    const pickerPassword = await vAPI.messaging.send('elementPicker', {
+        what: 'elementPickerPassword'
+    });
+    if ( typeof pickerPassword !== 'string' ) { return; }
     pickerBootArgs = await vAPI.messaging.send('elementPicker', {
-        what: 'elementPickerArguments',
+        what: 'elementPickerArguments'
     });
     if ( typeof pickerBootArgs !== 'object' ) { return; }
     if ( pickerBootArgs === null ) { return; }
@@ -1307,6 +1311,10 @@ const bootstrap = async ( ) => {
         iframe.setAttribute(pickerUniqueId, '');
         document.documentElement.append(iframe);
         iframe.addEventListener('load', ( ) => {
+            // rAF 延迟一帧再 postMessage：新版 Chromium 在 load 事件里立即
+            // 通信会丢消息（本 fork 的 0594055b3 修复）。
+            // password 字段来自上游 1.75.4 的拾取器安全加固（验证 secret
+            // token），与本修复正交，合并时两者都要保留。
             self.requestAnimationFrame(( ) => {
                 iframe.setAttribute(`${pickerUniqueId}-loaded`, '');
                 const channel = new MessageChannel();
@@ -1318,7 +1326,7 @@ const bootstrap = async ( ) => {
                     quitPicker();
                 };
                 iframe.contentWindow.postMessage(
-                    { what: 'epickerStart' },
+                    { what: 'epickerStart', password: pickerPassword },
                     url.href,
                     [ channel.port2 ]
                 );

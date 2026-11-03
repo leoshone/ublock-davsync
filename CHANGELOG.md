@@ -1,3 +1,7 @@
+- [Avoid use of potentially tainted XHR methods in scriptlets](https://github.com/gorhill/uBlock/commit/9a083e7e54)
+
+----------
+
 - [Add `freestar_pubfig.js` shim](https://github.com/gorhill/uBlock/commit/341f23df9c)
 - [Fix parsing of `permissions` filter option](https://github.com/gorhill/uBlock/commit/bb2e13b3c6)
 - [Improve `googlesyndication_adsbygoogle.js` shim](https://github.com/gorhill/uBlock/commit/4dddc2adb0)
@@ -7,6 +11,7 @@
 - [Improve jsonl-edit-fetch-response/jsonl-edit-xhr-response scriptlets](https://github.com/gorhill/uBlock/commit/42bcca027b)
 - [Export "My filters" content as an array in JSON backup file](https://github.com/gorhill/uBlock/commit/80f5a99fe4)
 - [Improve `prevent-clipboard-write` scriptlet](https://github.com/gorhill/uBlock/commit/e530864c46)
+
 
 ----------
 

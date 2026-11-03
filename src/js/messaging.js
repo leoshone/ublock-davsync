@@ -833,6 +833,8 @@ vAPI.messaging.listen({
 {
 // >>>>> start of local scope
 
+const epickerPassword = self.crypto.randomUUID();
+
 const onMessage = function(request, sender, callback) {
     // Async
     switch ( request.what ) {
@@ -865,6 +867,9 @@ const onMessage = function(request, sender, callback) {
     let response;
 
     switch ( request.what ) {
+    case 'elementPickerPassword':
+        response = epickerPassword;
+        break;
     case 'elementPickerEprom':
         µb.epickerArgs.eprom = request;
         break;
