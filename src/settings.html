@@ -70,10 +70,10 @@
 <div id="davSync" class="fieldset">
     <div class="fieldset-header">WebDAV 自动同步</div>
     <div class="li"><label><span class="input checkbox"><input type="checkbox" id="davSyncEnabled"><svg viewBox="0 0 24 24"><path d="M1.73,12.91 8.1,19.28 22.79,4.59"/></svg></span><span>启用 WebDAV 自动同步</span></label></div>
-    <div class="li"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">服务器URL</span><input type="url" id="davSyncUrl" placeholder="https://dav.jianguoyun.com/dav/" style="width:100%;box-sizing:border-box;"></label></div>
-    <div class="li"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">用户名</span><input type="text" id="davSyncUsername" autocomplete="off" style="width:100%;box-sizing:border-box;"></label></div>
-    <div class="li"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">应用密码</span><input type="password" id="davSyncPassword" autocomplete="off" style="width:100%;box-sizing:border-box;"></label></div>
-    <div class="li"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">设备名称</span><input type="text" id="davSyncDeviceName" style="width:100%;box-sizing:border-box;"></label></div>
+    <div class="li davsync-field"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">服务器URL</span><input type="url" id="davSyncUrl" placeholder="https://dav.jianguoyun.com/dav/" style="width:100%;box-sizing:border-box;"></label></div>
+    <div class="li davsync-field"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">用户名</span><input type="text" id="davSyncUsername" autocomplete="off" style="width:100%;box-sizing:border-box;"></label></div>
+    <div class="li davsync-field"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">应用密码</span><input type="password" id="davSyncPassword" autocomplete="off" style="width:100%;box-sizing:border-box;"></label></div>
+    <div class="li davsync-field"><label style="flex:1;min-width:0;"><span style="display:inline-block;min-width:5em;margin-right:0.4em;">设备名称</span><input type="text" id="davSyncDeviceName" style="width:100%;box-sizing:border-box;"></label></div>
     <div class="li"><label><span style="display:inline-block;min-width:5em;margin-right:0.4em;">同步间隔</span><input type="number" id="davSyncInterval" min="5" max="720" step="5" value="30" placeholder="30" title="范围 5–720 分钟" style="width:6em;"><span style="margin-left:0.45em;">分钟</span></label></div>
     <!-- .li 本身是 flex 容器，内容必须包在一个块级子元素里，否则标题/说明/按钮会被
          排成同一行（曾经就是这样错位的）。 -->

@@ -72,3 +72,12 @@ body.advancedUser [href="advanced-settings.html"] {
 :root.mobile #localData > div:last-of-type > button {
     min-width: unset;
     }
+
+/* DavSync 表单行：与下方「备份到文件…」按钮列同宽（按钮是 min-width:280px），
+   这样输入框右端正好和那一列对齐，而不是一路拉到窗口最右边。 */
+#davSync .davsync-field {
+    max-width: 280px;
+    }
+:root.mobile #davSync .davsync-field {
+    max-width: none;
+    }
