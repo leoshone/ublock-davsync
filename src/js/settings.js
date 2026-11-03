@@ -368,9 +368,29 @@ const davSyncReadForm = function() {
 };
 
 // 配置是否完整（启用同步所需的最低要求）
-// 设备名称必填：云端靠它区分数据来源，空名字会让其他设备看到「未知设备」。
+// 必填项按页面从上到下的顺序检查，只返回第一个缺失的字段名（空串表示都齐了）。
+// 设备名称也在其中：云端靠它区分数据来源，空名字会让其他设备看到「未知设备」。
+// 密码：页面上不回填明文，只要后台已存过（davSyncHasPassword）就算有。
+const DAV_REQUIRED_FIELDS = [
+    { label: '服务器 URL', selector: '#davSyncUrl',
+      missing: cfg => cfg.url === '' },
+    { label: '用户名', selector: '#davSyncUsername',
+      missing: cfg => cfg.username === '' },
+    { label: '应用密码', selector: '#davSyncPassword',
+      missing: cfg => cfg.password === '' && davSyncHasPassword !== true },
+    { label: '设备名称', selector: '#davSyncDeviceName',
+      missing: cfg => cfg.deviceName === '' },
+];
+
+const davSyncMissingField = function(cfg) {
+    for ( const field of DAV_REQUIRED_FIELDS ) {
+        if ( field.missing(cfg) ) { return field; }
+    }
+    return null;
+};
+
 const davSyncConfigComplete = function(cfg) {
-    return cfg.url !== '' && cfg.username !== '' && cfg.deviceName !== '';
+    return davSyncMissingField(cfg) === null;
 };
 
 // 表单相对已保存快照是否有变化
@@ -546,10 +566,13 @@ dom.on('#davSyncPassword', 'blur', ( ) => {
 
 dom.on('#davSyncSave', 'click', ( ) => {
     const cfg = davSyncReadForm();
-    if ( cfg.enabled && cfg.deviceName === '' ) {
-        davSyncSetStatus('请先填写设备名称（云端靠它区分不同设备的数据）');
-        qs$('#davSyncDeviceName').focus();
-        return;
+    if ( cfg.enabled ) {
+        const missing = davSyncMissingField(cfg);
+        if ( missing !== null ) {
+            davSyncSetStatus(`请先填写${missing.label}`);
+            qs$(missing.selector).focus();
+            return;
+        }
     }
     const payload = {
         what: 'davSyncSetConfig',
