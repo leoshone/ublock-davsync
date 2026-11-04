@@ -7,7 +7,7 @@
 > 性质说明：本文是 davsync fork 的**载体兼容性验证 + 侧载方法 + 功能 E2E** 三合一记录，按时间线追加（早期结论可能被后续章节推翻，以最新章节为准）：
 > 1. 各候选载体对「带扩展的 uBO fork」的兼容性验证结论（第 1-2 节为早期失败记录，第 7/9/10 节为成功载体）；
 > 2. 坚果云 WebDAV 后端验证（第 3 节，桌面通；Android 端有证书链问题见 7.3）；
-> 3. 各平台扩展侧载的完整自动化方法（详见 `.agents/skills/chrome-unpacked-sideload/SKILL.md`）；
+> 3. 各平台扩展侧载的完整自动化方法（已沉淀为通用 skill：私有库 **leoshone/Skills** 的 `browser-extension-e2e`——Cent/Turbo INTERNAL profile + CDP E2E；历史项目级 skill `.agents/skills/chrome-unpacked-sideload/` 已废弃归档）；
 > 4. **功能 E2E：单端 push、跨端 pull、双向同步均已真实跑通（第 9/10 节）**。
 >
 > 对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
@@ -101,7 +101,9 @@ GET     .../test.txt      → 200 OK
 
 ## 4. 方法学收获：Chrome 155 侧载自动化全链路
 
-本此验证沉淀出一套可复用的侧载自动化方法（已封装为工作区项目级 skill：`.workbuddy/skills/chrome-unpacked-sideload/`）：
+本此验证沉淀出一套可复用的侧载自动化方法（已沉淀为通用 skill：私有库 **leoshone/Skills** 的 `browser-extension-e2e`；下述方法学细节以该 skill 为准）：
+
+> 注（2026-11-04）：下述 1-2 条仍是有效结论；3-5 的 UIA/对话框/RDP 细节已并入新 skill 的 advanced.md。另：Cent 2026-11-03 起云控拦截 `--load-extension` 形态的扩展 UI 页，桌面 E2E 主线已改为 INTERNAL（crx 正规安装）profile + CDP，见新 skill 主流程。
 
 1. `--load-extension` 在 Chrome 137+ 失效，勿再尝试（开发者模式 / 组策略均救不回）；
 2. 唯一通道：`chrome://extensions` 页内「开发者模式」toggle → 「加载未打包的扩展程序」→ 原生目录对话框；
@@ -347,7 +349,7 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 | 扩展 ID | `odecihgahfphabajblgnmopeibmkhifp`（key 派生，全平台一致）✅ |
 
 产物：`dist/build/uBlock0.davsync_v1.75.1.16.chromium.crx`（已入 artifacts 分支与 Release，命名对齐官方 `uBlock0_v<版本>.<平台>` 规范）。
-打包方法与 key 管理见 `.agents/skills/chrome-unpacked-sideload/SKILL.md` 桌面章节。
+打包方法与 key 管理见 `tools/make-packages.md` 与通用 skill（私有库 **leoshone/Skills** → `browser-extension-e2e` §5 crx 打包要点）。
 
 ### 11.4 Turbo 命令行安装路径的限制（补充实测）
 

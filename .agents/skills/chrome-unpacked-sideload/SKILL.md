@@ -1,9 +1,17 @@
 ---
 name: chrome-unpacked-sideload
-description: 扩展侧载与测试的全平台操作手册（实测验证）。覆盖：① Windows Chrome 137+ 对话框自动化（--load-extension 失效场景）② Android Kiwi x86 adb 全自动 zip 加载 ③ 桌面国产浏览器（Turbo/百分，保留 MV2，双向同步 E2E 已通）。触发词：侧载、加载扩展、load-extension、加载未打包、chrome://extensions、扩展测试、Kiwi、Turbo、百分、双向同步。
+description: [已废弃 2026-11-04] 本 skill 已被通用 skill 取代：github.com/leoshone/Skills 私有库的 browser-extension-e2e（Cent/Turbo INTERNAL profile + CDP E2E，含本 skill 全部有效结论并修正了已失效的 --load-extension 建议）。新任务请加载新 skill；本文件仅作历史归档保留。
+agent_created: true
 ---
 
-# 扩展侧载与测试手册（Windows / Android / 桌面国产浏览器）
+# [DEPRECATED 2026-11-04] 已被 leoshone/Skills 仓库的 browser-extension-e2e 取代
+
+以下历史内容中，**桌面国产浏览器主载体方法已过时**：2026-11-03 起 Cent 云控规则
+拦截 `--load-extension`（unpacked）形态的扩展 UI 页，E2E 主线改为 INTERNAL
+（crx 正规安装）profile + CDP——见新 skill。Chrome 137+ 对话框自动化与
+Android Kiwi 章节仍有效（新 skill 的 references/advanced.md 有浓缩版）。
+
+---
 
 > 范围：**项目级 skill**——本工作区（uBlock DAV-Sync fork）扩展测试专用。
 > 章节：① Windows Chrome 137+（MV2 被拒场景）② Android Kiwi x86 ③ 桌面国产浏览器 Turbo/百分（MV2 E2E 主载体）。
