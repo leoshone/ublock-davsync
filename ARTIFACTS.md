@@ -35,7 +35,7 @@
 | `tools/make-packages.md` | 打包说明、各浏览器安装速查、踩坑记录 |
 | `docs/DAVSYNC-TESTING.md` | 全平台载体验证 + 侧载方法 + E2E 记录（1-12 节） |
 | `scripts/dav-e2e.py` | CDP E2E 同步测试骨架（连 bg → 注配置 → 触发 → 轮询 state → 判定） |
-| **通用 skill** | **扩展安装/E2E 测试方法已沉淀到私有库 [leoshone/Skills](https://github.com/leoshone/Skills) → `browser-extension-e2e`**（Cent/Turbo INTERNAL profile + CDP 驱动 + 陷阱速查 + 可复用 cdp_driver.py，2026-11-04）。本仓库 `.agents/skills/chrome-unpacked-sideload/` 为其前身，已废弃归档 |
+| **通用 skill** | **扩展安装/E2E 测试方法已沉淀到私有库 [leoshone/Skills](https://github.com/leoshone/Skills) → `browser-extension-e2e`**（Cent/Turbo INTERNAL profile + CDP 驱动 + 陷阱速查 + 可复用 cdp_driver.py，2026-11-04）。本仓库旧目录 `.agents/skills/chrome-unpacked-sideload/` 为其前身，2026-11-07 已删除，内容并入上述通用 skill |
 
 ## artifacts 分支内容（`build/`）
 

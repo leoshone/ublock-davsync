@@ -7,7 +7,7 @@
 > 性质说明：本文是 davsync fork 的**载体兼容性验证 + 侧载方法 + 功能 E2E** 三合一记录，按时间线追加（早期结论可能被后续章节推翻，以最新章节为准）：
 > 1. 各候选载体对「带扩展的 uBO fork」的兼容性验证结论（第 1-2 节为早期失败记录，第 7/9/10 节为成功载体）；
 > 2. 坚果云 WebDAV 后端验证（第 3 节，桌面通；Android 端有证书链问题见 7.3）；
-> 3. 各平台扩展侧载的完整自动化方法（已沉淀为通用 skill：私有库 **leoshone/Skills** 的 `browser-extension-e2e`——Cent/Turbo INTERNAL profile + CDP E2E；历史项目级 skill `.agents/skills/chrome-unpacked-sideload/` 已废弃归档）；
+> 3. 各平台扩展侧载的完整自动化方法（已沉淀为通用 skill：私有库 **leoshone/Skills** 的 `browser-extension-e2e`——Cent/Turbo INTERNAL profile + CDP E2E；历史项目级 skill `.agents/skills/chrome-unpacked-sideload/` 已于 2026-11-07 从本仓库删除，内容并入上述通用 skill）；
 > 4. **功能 E2E：单端 push、跨端 pull、双向同步均已真实跑通（第 9/10 节）**。
 >
 > 对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
