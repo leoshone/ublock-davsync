@@ -41,7 +41,7 @@
 
 'use strict';
 
-import { onBroadcast } from './broadcast.js';
+import { broadcast, onBroadcast } from './broadcast.js';
 
 /******************************************************************************/
 
@@ -55,10 +55,22 @@ const SYNC_INITIAL_DELAY_MIN = 2;    // first sync 2 min after launch
 const STARTUP_SYNC_DELAY_MS = 30000; // startup sync ~30 s after launch (let filter engines fully init on slow devices)
 
 /******************************************************************************/
-// Toolbar badge: error indicator for the DAV-Sync subsystem. uBO itself does
-// not use the badge (verified: no setBadge* anywhere in vAPI/background), so
-// it is safe to own here. Colors: red '!' = hard error (needs attention),
-// grey '↻' = transient (auto-recovers next round), cleared on success.
+// Toolbar badge: error indicator for the DAV-Sync subsystem. Colors: red '!'
+// = hard error (needs attention), grey '↻' = transient (auto-recovers next
+// round), cleared on success.
+//
+// Fork note (2026-11-07): uBO's own badge pipeline (tab.js updateBadge →
+// vAPI.setIcon) writes the per-tab blocked counter through tabId-scoped
+// setBadgeText calls, which override the global default badge we set here —
+// the conflict '!' disappeared as soon as the user browsed any page with
+// blocked requests. The fix has two halves:
+//   1. tab.js updateBadge overrides badge/color with '!'/'#D93025' while
+//      µb.davSyncConflicted is true (the flag this module maintains);
+//   2. on conflict state flips we broadcast 'davConflictChanged' so tab.js
+//      recomputes every tab's badge, and set a per-tab hover title telling
+//      the user what the '!' means.
+
+const CONFLICT_TITLE = 'uBO DAV-Sync: 同步冲突 — 请打开设置页选择保留哪边';
 
 const badgeSet = function(kind) {
     if ( typeof chrome === 'undefined' || !chrome.browserAction ) { return; }
@@ -74,6 +86,38 @@ const badgeSet = function(kind) {
         }
     } catch {
         // Badge API unavailable on some forks -- purely cosmetic, ignore.
+    }
+};
+
+// Reflect the conflict state onto µb (read by tab.js's badge pipeline) and,
+// on flips, ask tab.js to recompute all tab badges + set hover titles.
+const syncConflictFlag = async function() {
+    const conflicted = syncState.conflict === true;
+    const µb = (await import('./background.js')).default;
+    const flipped = µb.davSyncConflicted !== conflicted;
+    µb.davSyncConflicted = conflicted;
+    if ( flipped ) {
+        broadcast({ what: 'davConflictChanged', conflicted });
+    }
+    // Hover title on every known tab: chrome-observable hint for the '!'.
+    // (vAPI.setIcon's own setTitle only carries the badge count.)
+    if ( typeof chrome === 'undefined' || !chrome.browserAction?.setTitle ) {
+        return;
+    }
+    try {
+        const title = conflicted ? CONFLICT_TITLE : undefined;
+        for ( const tabId of µb.pageStores.keys() ) {
+            if ( vAPI.isBehindTheSceneTabId(tabId) ) { continue; }
+            if ( title !== undefined ) {
+                chrome.browserAction.setTitle({ tabId, title });
+            } else {
+                // conflict cleared: restore upstream-style title; vAPI.setIcon
+                // will overwrite on next badge update anyway.
+                chrome.browserAction.setTitle({ tabId, title: '' });
+            }
+        }
+    } catch {
+        // cosmetic only
     }
 };
 
@@ -147,6 +191,9 @@ const isRestartPending = function( ) {
 
 
 const updateBadge = function() {
+    // Reflect conflict state onto µb + broadcast flips (drives tab.js's
+    // per-tab badge override and the hover titles).
+    syncConflictFlag();
     // conflict state takes precedence over plain errors
     if ( syncState.conflict === true ) {
         badgeSet('error');

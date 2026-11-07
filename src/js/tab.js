@@ -33,6 +33,7 @@ import {
 
 import { PageStore } from './pagestore.js';
 import contextMenu from './contextmenu.js';
+import { onBroadcast } from './broadcast.js';
 import { i18n$ } from './i18n.js';
 import logger from './logger.js';
 import staticNetFilteringEngine from './static-net-filtering.js';
@@ -1078,6 +1079,15 @@ vAPI.tabs = new vAPI.Tabs();
             }
         }
 
+        // DAV-Sync fork: an unresolved sync conflict takes precedence over
+        // the per-tab blocked counter. Without this, the counter overwrites
+        // the red '!' on the very first blocked request and the user never
+        // sees the conflict indicator (2026-11-07, verified on-screen).
+        if ( µb.davSyncConflicted === true ) {
+            badge = '!';
+            color = '#D93025';
+        }
+
         // https://www.reddit.com/r/uBlockOrigin/comments/d33d37/
         if ( µb.userSettings.showIconBadge === false ) {
             parts |= 0b1000;
@@ -1147,6 +1157,27 @@ vAPI.tabs = new vAPI.Tabs();
     const pageStoreJanitorPeriod = { min: 15 };
 
     pageStoreJanitorTimer.on(pageStoreJanitorPeriod);
+}
+
+/******************************************************************************/
+// DAV-Sync fork: when the sync conflict state flips, every tab's badge must
+// be recomputed — the conflict '!' either takes over from the blocked counter
+// or yields back to it. davsync.js sets µb.davSyncConflicted then broadcasts;
+// we react here (tab.js owns the badge pipeline).
+{
+    // davsync.js broadcasts 'davConflictChanged' after flipping
+    // µb.davSyncConflicted; recompute every tab's badge here (tab.js owns
+    // the badge pipeline).
+    onBroadcast(msg => {
+        if ( msg.what !== 'davConflictChanged' ) { return; }
+        for ( const tabId of µb.pageStores.keys() ) {
+            if ( vAPI.isBehindTheSceneTabId(tabId) ) { continue; }
+            // Clear cached parts so updateBadge actually runs
+            // (updateToolbarIcon short-circuits when parts are unchanged).
+            µb.tabIdToDetails?.delete?.(tabId);
+            µb.updateToolbarIcon(tabId, 0b0110);
+        }
+    });
 }
 
 /******************************************************************************/
