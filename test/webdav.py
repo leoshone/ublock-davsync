@@ -25,8 +25,11 @@ HOST = '127.0.0.1'
 PORT = 8088
 USER = 'davtest'
 PASSWORD = 'davtest123'
-# davroot is relative to repo root regardless of CWD
-ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), 'davroot'))
+# davroot is a runtime artifact dir under _tmp/ (repo-root relative,
+# regardless of CWD) — the same dir acceptance.py's cloud_write/wipe_cloud
+# use directly on disk. Kept under _tmp/ by the 2026-11-07 test/ migration.
+ROOT = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), '..', '_tmp', 'davroot'))
 DAV_PREFIX = '/dav/'
 
 os.makedirs(ROOT, exist_ok=True)
