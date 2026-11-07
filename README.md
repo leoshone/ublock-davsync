@@ -21,18 +21,18 @@ uBlock Origin — DAV-Sync Edition
 
 ## 这个 fork 加了什么：DAV-Sync
 
-uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在本机，换设备/换浏览器要手动导出导入。**DAV-Sync 让任意多个浏览器实例通过任意标准 WebDAV 服务（坚果云、InfiniCLOUD、Nextcloud 等）自动保持 uBO 设置一致**：
+uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在本机，换设备/换浏览器要手动导出导入。**DAV-Sync 让任意多个浏览器实例通过任意标准 WebDAV 服务（坚果云、InfiniCLOUD等）自动保持 uBO 设置一致**：
 
 - **自动同步**：启动后自动同步一次；之后定时同步 + 本地变更稍后自动推送，无需人工干预；
 - **多端可靠**：锁文件防多端并发冲突，双端同时修改时不会静默覆盖，会明确提示让你选择保留哪边；
-- **跨浏览器**：数据存在你自己的 WebDAV 服务器上，不经过任何第三方云；理论上一切能装 uBO 的浏览器都适用。
+- **跨浏览器**：数据存在 WebDAV 服务器上，理论上一切能装 uBO mv2版的浏览器都适用。
 
 ### 适用浏览器
 
 | 平台 | 浏览器 |
 |---|---|
-| Windows 桌面 | **Turbo**、**百分（Cent）**、**Firefox** |
-| Android | **Quetta**（真机）、**Kiwi**（x86 设备/模拟器） |
+| Windows 桌面 | **Turbo**、**Cent**、**Firefox** |
+| Android | **Quetta**、**Kiwi** |
 
 > Chrome/Edge 等官方商店渠道已移除 MV2 支持，无法使用。各浏览器的详细安装方法与兼容性实测记录见[测试文档](docs/DAVSYNC-TESTING.md)。
 
@@ -42,18 +42,17 @@ uBO 原版的设置（过滤规则、自定义规则、白名单等）只存在�
 
 | 包 | 适用 | 安装方式 |
 |---|---|---|
-| **`.crx`** | 百分等支持 crx 安装的 Chromium 壳 | 扩展页开启「开发者模式」→ 拖入 crx → 确认。安装后持久生效 |
-| **`.zip`** | Kiwi（Android） | push 到设备 → 扩展页「+ (from .zip)」选择 |
-| 解包目录 | Turbo 等不支持 crx 安装的壳 | `--load-extension=<解包目录>` 启动 |
-| **`.firefox.xpi`** | Firefox（桌面） | 临时加载（web-ext），日常使用建议等待正式签名方案 |
+| **`.crx`** | Turbo、Cent 支持 crx 直接安装 | 扩展页开启「开发者模式」→ 点击crx链接。安装后支持自动更新 |
+| **`.zip`** | Kiwi（Android） | 复制到设备 → 扩展页「+ (from .zip)」选择 |
+| **`.firefox.xpi`** | Firefox（桌面） | 临时加载（web-ext） |
 
 ### 配置同步
 
 1. 扩展安装后打开 uBO 设置页 → 底部「DAV-Sync」区块
 2. 填 WebDAV 地址（如 `https://dav.jianguoyun.com/dav/`）、账号、**应用密码**（坚果云用授权密码而非登录密码）、设备名
-3. 开启开关 → 立即首推；其余设备填**同一 WebDAV 目录**、**不同设备名**即可自动互相同步
+3. 开启开关 → 立即首推；其余设备填**同一 WebDAV 地址**、**不同设备名**即可自动互相同步
 
-> 遇到同步连接错误时：个别 Android 网络环境可能无法直连坚果云 WebDAV（桌面端不受影响），切换网络/使用代理通常可解决，或改用其他标准 WebDAV 服务商（InfiniCLOUD/TeraCLOUD/自建 Nextcloud 均可）。
+> 遇到同步503错误时，可能是同步频率太高导致服务器限流，应增加定时同步的时间。
 
 ---
 
