@@ -15,7 +15,7 @@ The four requirements (from the plan):
   4. Clean WebDAV: rm -rf davroot and restart the server each run.
 
 This module provides the reusable pieces; the self-check script is at the
-bottom (run: python _tmp/scaffold.py selfcheck).
+bottom (run: python test/scaffold.py selfcheck).
 """
 import glob
 import json
@@ -69,11 +69,11 @@ EXT_PAYLOAD_SUBPATH = os.path.join(
 WEBDAV_URL = 'http://127.0.0.1:8088/dav/'
 WEBDAV_USER = 'davtest'
 WEBDAV_PASSWORD = 'davtest123'
-DAV_FILE_DIR = os.path.join(REPO, '_tmp', 'davroot', 'ublock-davsync')
+DAV_FILE_DIR = os.path.join(REPO, '_tmp', 'davroot', 'ublock-davsync')  # runtime artifact, stays in _tmp
 
 
 def rmtree(path):
-    """Profile dirs are test artifacts under _tmp; plain rmtree is right.
+    """Profile dirs are runtime artifacts under _tmp; plain rmtree is right.
     The environment's safe-delete hook can intercept os.* trash ops (and
     hard-abort the interpreter on bulk deletes >50 files), so prefer
     Windows native rmdir, and honour DAVSYNC_KEEP_PROFILE=1 to skip
@@ -567,7 +567,7 @@ def selfcheck():
     code, _ = dav_req('OPTIONS', '', expect=(200,))
     print(f'  [PASS] webdav server responds ({code})')
 
-    profile = os.path.join(REPO, '_tmp', 'p-selfcheck')
+    profile = os.path.join(REPO, '_tmp', 'p-selfcheck')  # runtime artifact, stays in _tmp
     browser = Browser(profile, port=9447)
     page = bg = None
     try:

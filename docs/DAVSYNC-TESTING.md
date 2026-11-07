@@ -917,7 +917,7 @@ grep -o "/log/[^ ]*" webdav.log | python -c "import sys,urllib.parse;[print(urll
 日志应为 `boot → dir=pull → boot → dir=none`（119 之后的行为）。
 122 起 pull 默认走**热应用**（无 hiddenSettings 差异时不重启），日志变为
 `boot → dir=pull`（单次 boot，热应用后无回弹）；下次 boot 为 `dir=none`。
-`_tmp/case8-firefox.py` 已把这条链路脚本化（push / pull / none 三会话自动判定）。
+`test/case8-firefox.py` 已把这条链路脚本化（push / pull / none 三会话自动判定）。
 
 截图核对 UI（无法注入脚本时的兜底）：用 `PrintWindow` 抓窗口位图存 PNG，
 再用 `PostMessage(WM_KEYDOWN, VK_NEXT)` 向下翻页——鼠标事件打不进内容区。
@@ -944,7 +944,7 @@ grep -o "/log/[^ ]*" webdav.log | python -c "import sys,urllib.parse;[print(urll
 5. **in-sync 分支补 `lastDirection='none'`**：step 4 / step 7 原本不写，
    状态行会一直停留上一次的「已从云端应用」（Firefox case8-C 实测暴露）。
 
-### 18.2 验收（_tmp/acceptance.py，Chromium 全绿 21 断言；case8 脚本化全绿）
+### 18.2 验收（test/acceptance.py，Chromium 全绿 21 断言；case8 脚本化全绿）
 
 | # | 用例 | 结果 |
 |---|---|---|
@@ -957,7 +957,7 @@ grep -o "/log/[^ ]*" webdav.log | python -c "import sys,urllib.parse;[print(urll
 | 7 | 远端改 hiddenSettings → 重启路径 | dir=pull + 重启后数据正确 + 页面可重开 ✅ |
 | 8 | Firefox（日志钩子构建） | A: push；B: pull 热应用无回弹；C(同 profile): dir=none，云端未被覆盖 ✅ |
 
-### 18.3 踩坑（脚手架层，已固化在 _tmp/scaffold.py）
+### 18.3 踩坑（脚手架层，已固化在 test/scaffold.py）
 
 - Cent 150 CDP 要求消息 `id` 为**整数**，字符串 id 不回包（表现为 recv 超时）；
 - `Target.createTarget` 后导航异步，立刻 evaluate 读到 about:blank，需轮询；

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Smoke test for _tmp/webdav.py — exercises every verb davsync.js uses.
+"""Smoke test for test/webdav.py — exercises every verb davsync.js uses.
 
 Run with the server already up:
-    python _tmp/webdav-test.py
+    python test/webdav-test.py
 Exits 0 only if all checks pass.
 """
 import base64

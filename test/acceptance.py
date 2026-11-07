@@ -2,8 +2,8 @@
 """davsync hot-apply acceptance tests (DAVSYNC-HOTAPPLY-PLAN.md §3 table).
 
 Run order (from repo root, two shells):
-  shell A:  rm -rf _tmp/davroot && mkdir -p _tmp/davroot && python _tmp/webdav.py
-  shell B:  python _tmp/acceptance.py
+  shell A:  rm -rf _tmp/davroot && mkdir -p _tmp/davroot && python test/webdav.py
+  shell B:  python test/acceptance.py
 
 Each case spins a fresh Cent profile (plan §3 requirement 3), opens the
 settings page via Target.createTarget (req 1), asserts every step (req 2)

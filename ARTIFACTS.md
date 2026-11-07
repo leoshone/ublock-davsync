@@ -57,17 +57,19 @@
 | `ublock-sideload.py` | Chrome 137+ 未打包扩展自动化加载（UIA + SendInput + WM_SETTEXT） |
 | `dav-e2e.py`（master `scripts/` 与 artifacts `scripts/` 各一份） | CDP E2E 同步测试骨架：注入配置 → 触发 → 轮询 state → 判定 PASS/FAIL |
 
-## _tmp/ 测试脚手架（v1.75.1.122 起长期复用；**脚本已入库**，运行产物不入库）
+## test/ 测试脚手架（v1.75.1.122 起长期复用；2026-11-07 从 _tmp/ 迁入 test/）
+
+脚本入库于 `test/`；**运行产物**（profile `p-*`、云端根 `davroot`、日志）仍在 `_tmp/`，随时可删。
 
 | 文件 | 说明 |
 |---|---|
-| `_tmp/webdav.py` | 本地 WebDAV 测试服务（8088，davtest/davtest123，纯标准库；If-Match 412 / 无鉴权 /log 回传口） |
-| `_tmp/webdav-test.py` | 服务自测（14 项动词/状态码断言） |
-| `_tmp/scaffold.py` | 测试脚手架：Cent INTERNAL 模板 profile + payload 覆盖 + createTarget 显式开设置页 + 断言工具；`python _tmp/scaffold.py` 跑三关自检 |
-| `_tmp/acceptance.py` | 计划 §3 验收表 Chromium 用例 1-7（21 断言），`python _tmp/acceptance.py all` |
-| `_tmp/firstpull-status.py` | 针对性回归（8 断言）：新设备首 pull 后「立即同步」状态不被覆盖（v1.75.4.102 修复的复现场景） |
-| `_tmp/case8-firefox.py` | 用例 8：Firefox 日志钩子构建 + web-ext 三会话（push/pull/none）自动判定 |
-| `_tmp/epicker-smoke.py` | 元素拾取器密码握手冒烟（rebase 上游后跑） |
+| `test/webdav.py` | 本地 WebDAV 测试服务（8088，davtest/davtest123，纯标准库；If-Match 412 / 无鉴权 /log 回传口） |
+| `test/webdav-test.py` | 服务自测（14 项动词/状态码断言） |
+| `test/scaffold.py` | 测试脚手架：Cent INTERNAL 模板 profile + payload 覆盖 + createTarget 显式开设置页 + 断言工具；`python test/scaffold.py` 跑三关自检 |
+| `test/acceptance.py` | 计划 §3 验收表 Chromium 用例 1-7（21 断言），`python test/acceptance.py all` |
+| `test/firstpull-status.py` | 针对性回归（8 断言）：新设备首 pull 后「立即同步」状态不被覆盖（v1.75.4.102 修复的复现场景） |
+| `test/case8-firefox.py` | 用例 8：Firefox 日志钩子构建 + web-ext 三会话（push/pull/none）自动判定 |
+| `test/epicker-smoke.py` | 元素拾取器密码握手冒烟（rebase 上游后跑） |
 
 ### 换机重建（2026-11-04 起）
 
@@ -75,7 +77,7 @@
 1. 装 Cent（`D:\Software\Cent`）或 Turbo——仅浏览器本体；
 2. **重建 INTERNAL 模板 profile**（一次性）：Cent 带 `--user-data-dir=<模板目录>` 启动 → 开发者模式 → 拖入 Release 的 .crx → 关闭。然后把模板路径写入环境变量 `DAVSYNC_PROFILE_TEMPLATE`（浏览器路径可同样用 `DAVSYNC_CENT_EXE` 覆盖默认值）；
 3. key pem 从 leoshone/secrets 私有库取（`ublock-davsync/davsync-key.pem`）；
-4. `python _tmp/scaffold.py selfcheck` 三关全绿即环境就绪。
+4. `python test/scaffold.py selfcheck` 三关全绿即环境就绪。
 
 通用方法论（载体选择、CDP 驱动、陷阱）见私有库 [leoshone/Skills](https://github.com/leoshone/Skills) → `browser-extension-e2e`。
 

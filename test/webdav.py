@@ -10,7 +10,7 @@ Conditional PUT via If-Match header -> 412 on mismatch (conflict path).
 Plus a /log/<msg> sink used by the Firefox log-hook build (TESTING.md §17).
 
 Pure stdlib (no wsgidav dependency). Run from repo root:
-    python _tmp/webdav.py
+    python test/webdav.py
 """
 import base64
 import json
