@@ -2,7 +2,12 @@
 
 
 > **文档导航**：总结论看下方表格；安装/打包方法看 `tools/make-packages.md` 与 SKILL；
-> 早期失败验证：1-2 节；成功载体与 E2E：7/9/10 节；打包与拖拽安装：11 节。
+> 早期失败验证：1-2 节；成功载体与 E2E：7/9/10 节；打包与拖拽安装：11 节；
+> 最新发行与修复记录：19 节。
+>
+> ⚠️ **11.4 / 11.5 关于「Turbo 不能装自签 crx」是 2026-10-22 的历史结论**（测的是
+> 「crx 路径作命令行参数」这一条路径），已被 2026-11-07 用户实测推翻：**Turbo / Cent
+> 从扩展页点击或拖入 crx 均可直接安装并自动更新**。以 19.1 节与 README 为准。
 
 > 性质说明：本文是 davsync fork 的**载体兼容性验证 + 侧载方法 + 功能 E2E** 三合一记录，按时间线追加（早期结论可能被后续章节推翻，以最新章节为准）：
 > 1. 各候选载体对「带扩展的 uBO fork」的兼容性验证结论（第 1-2 节为早期失败记录，第 7/9/10 节为成功载体）；
@@ -13,6 +18,7 @@
 > 对象：uBlock Origin DAV-Sync fork（本仓库，commit `22efe91`，基于 uBO 1.75.1.16，Manifest V2）
 > 产物：`dist/build/uBlock0.davsync_v1.75.1.16.chromium.zip` 及解包目录
 > 环境：Windows 10 x64 + Chrome 155.0.8059.85（独立 profile）；MuMu 15 模拟器（Android 15，x86_64 + houdini ARM 翻译）；坚果云 WebDAV
+> 以上是**首版测试对象**；当前基线已 rebase 至上游 1.75.4 正式版，最新发行 v1.75.4.103（见 19 节）。
 
 ## 限制：Quetta 在 MuMu 模拟器上跑不起来（真机正常）
 
@@ -34,7 +40,7 @@ Android 端的自动化测试因此改用 Kiwi（x86），Quetta 需要在真机
 - 因此在 MuMu 里 Quetta 只能验证到「扩展后台进程在跑」，**配置界面与同步流程都无法验证**。
   要测 Quetta 请用 arm64 真机（正常环境），行为与桌面端一致。
 
-## 总结论（2026-10-22 更新，2026-11-04 增补 Chrome 侧载通道变化）
+## 总结论（2026-10-22 更新，2026-11-04 增补 Chrome 侧载通道变化，2026-11-07 修订 Turbo crx 结论）
 
 **fork 同步功能已在真实载体上端到端跑通（多端双向）。早期被否决的 Kiwi 已被推翻（有 x86 构建）。**
 
@@ -42,19 +48,23 @@ Android 端的自动化测试因此改用 Kiwi（x86），Quetta 需要在真机
 
 | 平台 | 载体 | 安装方式 | 双向同步 E2E |
 |---|---|---|---|
-| Windows | 百分（Cent）5.3.1184.25 | ✅ crx 拖拽 / 解包加载 | ✅ 通过（界面与同步全量回归通过） |
-| Windows | Turbo 154 | ✅ --load-extension（会话级；2026-11-04 起推荐 INTERNAL profile 形态，见 skill） | ✅ 通过 |
+| Windows | 百分（Cent）5.3.1184.25 | ✅ crx 直接安装（点击/拖拽，需开发者模式）/ 解包加载 | ✅ 通过（界面与同步全量回归通过） |
+| Windows | Turbo 154 | ✅ crx 直接安装（同 Cent，2026-11-07 用户实测；测试长流程仍用 INTERNAL profile 形态，见 skill） | ✅ 通过 |
 | Windows | Firefox 159 | ✅ web-ext 临时加载 | ✅ 通过（17 节，三会话脚本化） |
 | Android 真机 (arm64) | Quetta | ✅ zip 加载 | ✅ 正常可用（由使用者确认，未做真机实测） |
-| Android 模拟器 (MuMu x86) | Kiwi x86 | ✅ zip 加载 | ⚠️ 安装运行正常；同步受坚果云 Android 证书链问题阻（7.3 节） |
+| Android 模拟器 (MuMu x86) | Kiwi x86 | ✅ zip 加载 | ✅ 换网络/代理后 E2E 全通（14.2 节）；特定网络下受坚果云 Android 证书链问题阻（7.3 节） |
 | Android 模拟器 (MuMu x86) | Quetta（arm64 包） | ⚠️ 装了也用不了 | ⚠️ 仅模拟器受限：houdini 翻译下渲染进程 SIGSYS 秒杀（见上方「限制」节） |
 | Windows | Chrome 155+ | ❌ MV2 已移除 | — |
+
+> Turbo / Cent 的 crx 安装后为 **INTERNAL**（重启持久 ENABLED），并由 manifest 的
+> `update_url` → `docs/update.xml` 自动更新（14.3 / 19.1 节）。11.4 的
+> `CRX_REQUIRED_PROOF_MISSING` 只出现在「crx 路径作命令行参数」这一条路径上。
 
 ### 工程细节（测试/开发视角）
 
 | 载体 | 结果 | 说明 |
 |---|---|---|
-| 桌面 Turbo 154 | ✅ **E2E 通过** | `--load-extension` 有效；会话内 setEnabled 启用；详见第 9 节 |
+| 桌面 Turbo 154 | ✅ **E2E 通过** | `--load-extension` 有效（第 9 节）；2026-11-07 起 crx 直接安装同样可用（19.1 节），长流程测试用 INTERNAL profile |
 | 桌面百分 150 | ✅ **E2E 通过** | Preferences 预写持久启用；详见第 10 节 |
 | 桌面 Chrome 155 | ❌ 无法加载 | Chrome 137+ 移除 MV2（早期记录，第 1 节） |
 | MuMu Quetta 2.0.8（arm64） | ⚠️ SIGSYS 全灭（**仅 MuMu**） | houdini 翻译问题；真机正常可用，模拟器上**换 Kiwi x86 即解**（第 2/7 节） |
@@ -340,6 +350,8 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 - **2026-10-22 上午**：首版。Chrome 155 / MuMu（Quetta、Chromium 110）/ 坚果云 WebDAV 兼容性验证；沉淀 Chrome 137+ 侧载自动化方法；browser-skill 评估（第 6 节）。
 - **2026-10-22 午后**：Kiwi x86 实测（第 7 节，推翻"仅 ARM"结论；发现坚果云 Android 证书链缺陷）；floccus 源码参考分析（第 8 节）；Turbo 154 E2E 首次真实同步成功，修复 3 个 fork bug（第 9 节）；davsync.js 落地 floccus 式 4 项加固。
 - **2026-10-22 下午**：百分 × Turbo 双向同步 E2E 全通（第 10 节）；SKILL 沉淀桌面国产浏览器路线与 Preferences 预写法。
+- **2026-11-07/08**：Turbo / Cent 从扩展页直接装 crx 与自动更新实测可用（19.1）；冲突
+  badge 被拦截计数覆盖的产品级缺陷修复、全量回归 21 断言、发版 v1.75.4.103（19.2/19.3）。
 
 ## 11. CRX3 打包与拖拽安装 —— 2026-10-22 追加（验证通过 ✅）
 
@@ -365,7 +377,11 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 产物：`dist/build/uBlock0.davsync_v1.75.1.16.chromium.crx`（已入 artifacts 分支与 Release，命名对齐官方 `uBlock0_v<版本>.<平台>` 规范）。
 打包方法与 key 管理见 `tools/make-packages.md` 与通用 skill（私有库 **leoshone/Skills** → `browser-extension-e2e` §5 crx 打包要点）。
 
-### 11.4 Turbo 命令行安装路径的限制（补充实测）
+### 11.4 Turbo 命令行安装路径的限制（2026-10-22 历史结论，**分发建议已被 19.1 节推翻**）
+
+> ⚠️ 保留本节供排查「crx 路径作命令行参数」这一条路径。**它不适用于从扩展页点击 /
+> 拖入 crx 的正规安装**：2026-11-07 用户实测 Turbo 与 Cent 都能这样直接装，且装后
+> 自动更新（19.1 节）。README 与 `tools/make-packages.md` 已按新结论更新。
 
 Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSING`——Turbo 把它当
 「扩展更新请求」走 InstallVerifier 校验，要求 Google 商店 proof（Web Store 签名），
@@ -376,12 +392,17 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 |---|---|---|
 | 百分 150 | 命令行参数 / 拖拽 | ✅ 弹确认框 → 安装（需开发者模式开） |
 | Turbo 154 | 命令行参数 | ❌ CRX_REQUIRED_PROOF_MISSING（策略拒绝） |
-| Turbo 154 | 拖拽 | 未测（理论同走 InstallVerifier，预期同样拒绝） |
+| Turbo 154 | 拖拽 | 当时未测、理论预期被拒；**2026-11-07 实测可用**（19.1 节） |
 | Turbo 154 | **--load-extension + 会话内 setEnabled** | ✅ 可靠方案（已验证 E2E） |
 
-**推荐分发方式**：百分用 crx 拖拽/命令行；Turbo 继续用 --load-extension 脚本方案。
+**当时（2026-10-22）的推荐分发方式**：百分用 crx 拖拽/命令行；Turbo 用 --load-extension
+脚本方案。**现行方式见 19.1：Turbo / Cent 一律用 Release 的 crx 点击/拖拽安装。**
 
-### 11.5 企业策略白名单方案（ExtensionInstallAllowlist）—— Turbo 上不可行（已实测）
+### 11.5 企业策略白名单方案（ExtensionInstallAllowlist）—— Turbo 上不可行（2026-10-22 历史实测）
+
+> ⚠️「Turbo 剥离 policy 服务、注册表策略读不到」这一观察仍然成立，但由此推出的
+> 「自签 crx 离线安装无绕过手段」已被 19.1 节推翻——**根本不需要策略白名单**，
+> 从扩展页点击/拖入 crx 即可正规安装。
 
 尝试按 Chrome 企业策略方案放行自签 crx：在 HKLM/HKCU 的
 `Policies\Google\Chrome`、`Policies\Chromium`、`Policies\Turbo`、`Policies\TurboX`
@@ -393,8 +414,9 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 
 结论：
 - **百分 150**：策略/开发者模式路径均可装自签 crx ✅
-- **Turbo 154**：policy 服务被剥离，自签 crx 离线安装无绕过手段 ❌，只能 --load-extension（会话级）
-- 已在 Turbo 官方 issue #724 补充该测试结果，请官方提供豁免开关或修复
+- **Turbo 154**：policy 服务被剥离、注册表策略无效 ✅（观察仍成立）；但自签 crx
+  **不需要**策略放行，扩展页点击/拖拽即可安装（19.1 节）——当时的「只能 --load-extension」结论作废 ❌
+- 已在 Turbo 官方 issue #724 补充该测试结果（仅针对「crx 作命令行参数」路径）
 
 ## 12. Quetta（模拟器）与 Firefox（桌面）补测 —— 2026-10-22 追加
 
@@ -423,14 +445,14 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 - **产物**：`uBlock0.davsync_v1.75.1.16.firefox.xpi`（已入 artifacts 分支与 Release）；
   gecko id = `uBlock0@raymondhill.net`（沿用上游，Firefox 侧无固定 ID 需求）。
 
-### 12.3 更新后的全平台矩阵
+### 12.3 全平台矩阵（2026-10-22 快照，后续结论见 17 / 19 节）
 
 | 平台 | 载体 | 构建 | 加载 | 同步 E2E |
 |---|---|---|---|---|
 | Windows | 百分 150 | chromium | ✅ crx 拖拽 | ✅ |
-| Windows | Turbo 154 | chromium | ✅ --load-extension | ✅ |
-| Windows | Firefox 159 | **firefox（本节）** | ✅ web-ext 临时加载 | ⏳ 待配置验证 |
-| Android 模拟器 | Kiwi x86 | chromium | ✅ zip 按钮 | ⚠️ 证书阻断 |
+| Windows | Turbo 154 | chromium | ✅ crx 直接安装（19.1）/ --load-extension | ✅ |
+| Windows | Firefox 159 | **firefox（本节）** | ✅ web-ext 临时加载 | ✅（17 节三会话脚本化通过） |
+| Android 模拟器 | Kiwi x86 | chromium | ✅ zip 按钮 | ✅（14.2 换网络后全通；特定网络下证书阻断） |
 | Android 模拟器 | Quetta arm64 | chromium | ❌ SIGSYS + 注入失效 | ❌ |
 | Windows | Chrome 155 | chromium | ❌ MV2 移除 | — |
 
@@ -446,11 +468,14 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 
 ## 13. 功能迭代：错误标识 / 冲突手动处理 / 自定义间隔 / 更名 —— 2026-10-22 深夜
 
-### 13.1 工具栏 badge 错误标识（uBO 未占用 badge，实测可用）
+### 13.1 工具栏 badge 错误标识（早期判断「uBO 未占用 badge」，v1.75.4.103 已修正）
 
 - 红 `!`（#D93025）：硬错误——412 冲突未处理、解析失败、HTTP 4xx、remote-vanished
 - 灰 `↻`（#9AA0A6）：暂时性——`network:`、`HTTP 5xx`、`locked-by-other-device`
 - 成功同步后清除；每个同步出口统一调 `updateBadge()`
+- ⚠️ **v1.75.4.103 修正**：uBO 自身的「每页拦截计数」写的是同一个 badge，会立即覆盖
+  红 `!`（「uBO 未占用 badge」的早期判断作废）。现在冲突期间由 `tab.js` 强制覆盖为
+  红 `!`，冲突解除后恢复计数显示，详见 19.2 节。
 
 ### 13.2 冲突改为「停机等用户决策」（替代原 last-writer-wins）
 
@@ -985,3 +1010,64 @@ grep -o "/log/[^ ]*" webdav.log | python -c "import sys,urllib.parse;[print(urll
   URL，测试脚本要用 `/js/` 前缀绝对路径；
 - 本地 WebDAV 测试服务的 `/log/<msg>` 回传口不能要求鉴权（钩子 fetch 不带
   凭据），否则日志静默丢失。
+
+---
+
+## 19. v1.75.4.103：Turbo/Cent crx 直接安装确认 + 冲突 badge 修复 —— 2026-11-07/08
+
+> 本节是**现行结论**。11.4 / 11.5 的「Turbo 不能装自签 crx」为历史记录，保留供排查
+> 「crx 作命令行参数」这一条路径；分发与安装请以本节和 README 为准。
+
+### 19.1 发行通道：Turbo / Cent 都支持 crx 直接安装与自动更新
+
+用户 2026-11-07 实测（README 提交 `a55d82309` 已据此改写）：
+
+| 项 | 结论 |
+|---|---|
+| 安装方式 | 扩展页开启「开发者模式」→ 点击 / 拖入 Releases 里的 `.crx` → 确认安装 |
+| 适用载体 | **Turbo 154 与 Cent（百分）150 均通过**；装后为 INTERNAL（`location:1`，`Default/Extensions/<id>/<ver>_1`），重启持久 ENABLED |
+| 自动更新 | manifest 的 `update_url` → `docs/update.xml`；每次 Release 由 `davsync-update-feed.yml` 自动改写 feed（14.3 节），已装扩展自动升级，无需重装 |
+| 扩展 ID | `odecihgahfphabajblgnmopeibmkhifp`（key 派生，全平台一致） |
+
+**与 11.4 的差异从何而来**：11.4 测的是「把 crx 路径作为浏览器启动命令行参数」，
+Turbo 把它当作**扩展更新请求**送进 InstallVerifier，要求 Web Store proof，于是报
+`CRX_REQUIRED_PROOF_MISSING`；从扩展页点击 / 拖入 crx 走常规安装路径，不受该校验影响。
+11.5 观测到的「Turbo 剥离 policy 服务、注册表策略读不到」依然成立，只是**不再需要**
+用 `ExtensionInstallAllowlist` 绕过——开发者模式 + crx 直接安装即可。`--load-extension`
+现在只用于自动化测试的会话级形态，不再是分发方式。
+
+### 19.2 冲突「!」被拦截计数覆盖 —— 产品级缺陷与修复（v1.75.4.103）
+
+- **现象**：双端同时改动触发 `both-changed` 后，程序化读取 `chrome.browserAction.getBadgeText`
+  确实是 `{'!': #D93025}`，但用户浏览任何有拦截的页面时，图标角标立刻变成灰色拦截计数
+  （2026-11-07 全屏截图实证：冲突图标被灰「6」覆盖）。
+- **根因**：`davsync.js` 的 `updateBadge()` 用全局默认 badge 写红「!」，而 uBO 原生
+  `tab.js updateBadge` 走 `vAPI.setIcon` 按 tabId 写每页拦截计数；两个通道抢同一个
+  badge，页面请求一刷新就把「!」盖掉，且 `updateBadge()` 只在同步事件时调用。
+- **修复**（提交 `649785c75`，`src/js/tab.js` + `src/js/davsync.js`）：
+  1. `davsync.js` 新增 `syncConflictFlag()`：把冲突态同步到 `µb.davSyncConflicted`，
+     状态翻转时广播 `davConflictChanged`，并逐 tab 设置悬停提示
+     「uBO DAV-Sync: 同步冲突 — 请打开设置页选择保留哪边」；
+  2. `tab.js updateBadge` 在 `µb.davSyncConflicted === true` 时强制 `badge='!'`、
+     `color='#D93025'`，压过拦截计数；
+  3. `tab.js` 监听 `davConflictChanged`：清 `tabIdToDetails` 缓存并对所有 pageStore
+     tab 调 `updateToolbarIcon(tabId, 0b0110)` 重算，冲突出现/解除瞬间全 tab 立即切换。
+- **验证**：
+  - 程序化：冲突后 `getBadgeText` = `'!'` + `#D93025`；
+  - 视觉：INTERNAL profile 复现冲突 → 激活含拦截的百度 tab → 全屏 BitBlt 截图 →
+    10x 放大确认 uBO 盾牌右下角红底白「!」稳定显示（修复前同场景是灰「6」）。
+    **前提：uBO 按钮已固定在工具栏**（测试 profile 默认收在扩展拼图菜单里）；
+  - 回归：`test/acceptance.py` 全量 21 断言全绿（case1-4 一轮 + case5/6/7 补跑确认），
+    badge 改动无回归。
+
+### 19.3 发版与产物（v1.75.4.103）
+
+| 项 | 值 |
+|---|---|
+| Release | `v1.75.4.103`，三资产 crx / zip / firefox.xpi（约 6.06 / 6.06 / 6.10 MB） |
+| 提交 | `649785c75`（badge 修复）、`f0a2068d8`（CI 自动写 `docs/update.xml`） |
+| 流程 | `dist/version` → `make-chromium-meta.py` → `make-packages.cjs` → `make-firefox.sh` + 重打 xpi → `gh release create` → CI 更新 feed → `git pull` |
+
+构建备忘：`tools/copy-common-files.sh` 在 `js/` 目录已存在时会因 `mkdir` 失败 + `set -e`
+静默退出，改过 `src/js/*.js` 后需手动补拷到 `dist/build/uBlock0.chromium/js/`
+（本次 `tab.js` / `davsync.js` 即如此）；长期修复候选是把 `mkdir` 改成 `mkdir -p`。

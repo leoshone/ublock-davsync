@@ -1,7 +1,11 @@
 # davsync 扩展打包说明（CRX3 / ZIP / XPI）
 
-> 最终有效方案（2026-10-22 实测验证）：`node tools/make-packages.cjs` 一键出
-> **.crx（拖拽/命令行安装）+ .zip（Kiwi 加载）**。
+> 最终有效方案（2026-10-22 实测，2026-11-07 补订）：`node tools/make-packages.cjs` 一键出
+> **.crx（扩展页点击/拖拽安装）+ .zip（Kiwi 加载）**，Firefox 的 `.xpi` 另由
+> `tools/make-firefox.sh` 构建后重打。
+> **Turbo 与 Cent 都支持 crx 直接安装并自动更新**（2026-11-07 用户实测，见
+> `docs/DAVSYNC-TESTING.md` §19.1）；本文件早期「Turbo 不能装 crx」的结论只适用于
+> 「crx 作命令行参数」这一条路径。
 > 早期手写 CRX3 protobuf 的方案已被废弃（原因见文末「踩坑记录」）。
 
 ## 一键打包
@@ -19,22 +23,27 @@ node tools/make-packages.cjs [keyPath]
 
 | 文件 | 用途 | 实测 |
 |---|---|---|
-| `uBlock0.davsync-<ver>.crx` | 百分等浏览器拖拽安装 / crx 路径作命令行参数 | ✅ 百分 150 安装成功（持久 ENABLED） |
-| `uBlock0.davsync-<ver>.zip` | Kiwi 扩展页「+ (from .zip)」加载 | ✅ Kiwi x86 加载成功 |
-| ~~`.xpi`~~ | Firefox 系用；Chromium 系拖拽**不认**，已不产出 | — |
+| `uBlock0.davsync_v<ver>.chromium.crx` | Turbo / Cent 扩展页点击或拖入安装 | ✅ 两者均安装成功（持久 ENABLED + 自动更新） |
+| `uBlock0.davsync_v<ver>.chromium.zip` | Kiwi 扩展页「+ (from .zip)」加载 / 解包侧载 | ✅ Kiwi x86 加载成功 |
+| `uBlock0.davsync_v<ver>.firefox.xpi` | Firefox 临时加载（web-ext） | ✅ 第 17 节三会话脚本化通过 |
+
+> 三资产都由发版流程产出并上传 Release（xpi 走 `make-firefox.sh` 后重打）。
+> Chromium 扩展页**不认裸 zip/xpi**，只有 CRX3 能触发安装。
 
 ## 各浏览器安装方式速查
 
 | 浏览器 | 方式 | 前提 | 结果 |
 |---|---|---|---|
-| 百分 150 | crx 拖入扩展页 / crx 路径作命令行参数 | **开发者模式开启**（必须） | 弹确认框 → 持久 ENABLED |
-| Turbo 154 | --load-extension + 会话内 `management.setEnabled` | CDP 调试端口 | 会话级（重启丢失） |
-| Turbo 154 | crx 拖拽 / 命令行参数 | ❌ | `CRX_REQUIRED_PROOF_MISSING`（策略拒绝，已提 issue tbrowser/Turbo-Browser#724） |
+| Cent（百分）150 | 扩展页点击 / 拖入 crx | **开发者模式开启**（必须） | 弹确认框 → 持久 ENABLED + 自动更新 |
+| Turbo 154 | 扩展页点击 / 拖入 crx（2026-11-07 实测） | **开发者模式开启** | ✅ 同上，持久 ENABLED + 自动更新 |
+| Turbo 154 | crx 路径作命令行参数 | — | ❌ `CRX_REQUIRED_PROOF_MISSING`（被当更新请求，历史路径，见 TESTING §11.4） |
+| Turbo / Cent | `--load-extension` + 会话内 `management.setEnabled` | CDP 调试端口 | 仅自动化测试用，会话级（重启丢失） |
 | Kiwi x86 (Android) | zip 按钮加载 | 开发者模式默认开 | ✅ |
 | Chrome 155+ | 无解 | MV2 已移除 | — |
 
-注意：**crx 拖拽/命令行安装 = 持久 ENABLED**（普通安装，Preferences 有持久条目）；
-**--load-extension = 会话级 DISABLED 起点**，需 setEnabled 且重启丢失。优先用 crx。
+注意：**扩展页点击/拖入 crx = 正规 INTERNAL 安装**，重启持久 ENABLED，且由
+`docs/update.xml` 自动更新（见下节）；**`--load-extension` = 会话级 DISABLED 起点**，
+需 setEnabled 且重启丢失。分发与日常安装一律用 crx，不要再走命令行传 crx 的路径。
 
 ## 扩展 ID 与 key
 
@@ -61,16 +70,29 @@ python -c "import base64,hashlib; der=open('davsync-pub.der','rb').read(); \
 然后 `node tools/make-packages.cjs` 重新打包。
 私钥 davsync-key.pem **勿入库**（.gitignore 已排除 *.pem）。
 
+## 自动更新通道（2026-11-07 确认可用）
+
+- `platform/chromium/manifest.json` 的 `update_url` 指向
+  `https://raw.githubusercontent.com/leoshone/ublock-davsync/master/docs/update.xml`；
+- Release 发布后 `.github/workflows/davsync-update-feed.yml` 自动把 feed 的
+  `codebase` / `version` 改成最新版（历史手工改写已废弃）；
+- feed 里的 `appid` **必须全小写** `odecihgahfphabajblgnmopeibmkhifp`，否则 Chromium
+  静默不匹配、更新不生效；
+- Turbo / Cent 已安装的 crx 会自动升级，无需重新安装或手工改 manifest。
+
 ## 踩坑记录（为什么废弃早期方案）
 
 1. **裸 zip/.xpi 拖到 Chromium 扩展页不触发安装**——拖拽只认 CRX3 格式
    （`Cr24` magic + protobuf header + zip payload）。
 2. **手写 CRX3 protobuf**（openssl 签名 + 手工构造 field2/field10000）：
-   结构与原版 uBO crx 逐字段对齐、openssl 验签 Verified OK，但在 Turbo 154 上
-   报 `CRX_REQUIRED_PROOF_MISSING`。换 crx3 npm 工具签名后百分安装走到确认弹窗——
-   细节差异未深究，**结论：不要手写，统一用 crx3 工具**。
+   结构与原版 uBO crx 逐字段对齐、openssl 验签 Verified OK，但在 Turbo 154 的
+   **命令行参数路径**上报 `CRX_REQUIRED_PROOF_MISSING`。换 crx3 npm 工具签名后
+   百分安装走到确认弹窗——细节差异未深究，**结论：不要手写，统一用 crx3 工具**。
+   crx3 签出的包在 Turbo 扩展页点击安装同样可用（2026-11-07 实测）。
 3. **CRX 安装的前提是开发者模式开启**，否则 `CRX_SIGNATURE_VERIFICATION_FAILED`
-   （InstallVerifier 拒绝未上架商店的自签包）。百分的 dev-mode 可用 Preferences 预写
-   `extensions.ui.developer_mode=true` 持久开启。
-4. Turbo 154 的 crx 命令行/拖拽安装被策略拒绝（要求 Google 商店 proof），
-   已提 issue：tbrowser/Turbo-Browser#724。Turbo 端用 --load-extension 方案。
+   （InstallVerifier 拒绝未上架商店的自签包）。Cent 的 dev-mode 可用 Preferences 预写
+   `extensions.ui.developer_mode=true` 持久开启；Turbo 从扩展页手动打开即可。
+4. Turbo 154 的 **crx 命令行参数**安装被策略拒绝（要求 Google 商店 proof），
+   已提 issue：tbrowser/Turbo-Browser#724。但这是「把 crx 当启动参数」这条路径的
+   限制，**从扩展页点击/拖入 crx 没有问题**（2026-11-07 用户实测，见 TESTING §19.1）。
+   Turbo 端现在同样用 Release 的 crx 安装 + 自动更新，不必再走 --load-extension。
