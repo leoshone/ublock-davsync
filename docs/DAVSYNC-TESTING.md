@@ -7,7 +7,7 @@
 >
 > ⚠️ **11.4 / 11.5 关于「Turbo 不能装自签 crx」是 2026-10-22 的历史结论**（测的是
 > 「crx 路径作命令行参数」这一条路径），已被 2026-11-07 用户实测推翻：**Turbo / Cent
-> 点击 crx 链接即可直接安装并自动更新**。以 19.1 节与 README 为准。
+> 点击 crx 链接或拖入 crx 文件均可直接安装并自动更新**。以 19.1 节与 README 为准。
 
 > 性质说明：本文是 davsync fork 的**载体兼容性验证 + 侧载方法 + 功能 E2E** 三合一记录，按时间线追加（早期结论可能被后续章节推翻，以最新章节为准）：
 > 1. 各候选载体对「带扩展的 uBO fork」的兼容性验证结论（第 1-2 节为早期失败记录，第 7/9/10 节为成功载体）；
@@ -48,7 +48,7 @@ Android 端的自动化测试因此改用 Kiwi（x86），Quetta 需要在真机
 
 | 平台 | 载体 | 安装方式 | 双向同步 E2E |
 |---|---|---|---|
-| Windows | 百分（Cent）5.3.1184.25 | ✅ crx 直接安装（点击 crx 链接，需开发者模式）/ 解包加载 | ✅ 通过（界面与同步全量回归通过） |
+| Windows | 百分（Cent）5.3.1184.25 | ✅ crx 直接安装（点击链接/拖入文件，需开发者模式）/ 解包加载 | ✅ 通过（界面与同步全量回归通过） |
 | Windows | Turbo 154 | ✅ crx 直接安装（同 Cent，2026-11-07 用户实测；测试长流程仍用 INTERNAL profile 形态，见 skill） | ✅ 通过 |
 | Windows | Firefox 159 | ✅ web-ext 临时加载 | ✅ 通过（17 节，三会话脚本化） |
 | Android 真机 (arm64) | Quetta | ✅ zip 加载 | ✅ 正常可用（由使用者确认，未做真机实测） |
@@ -380,8 +380,9 @@ Turbo 154.0.8037.102（国产 Chromium 内核，保留 MV2）：`--load-extensio
 ### 11.4 Turbo 命令行安装路径的限制（2026-10-22 历史结论，**分发建议已被 19.1 节推翻**）
 
 > ⚠️ 保留本节供排查「crx 路径作命令行参数」这一条路径。**它不适用于「点击 crx
-> 链接」的正规安装**：2026-11-07 用户实测 Turbo 与 Cent 都能这样直接装，且装后
-> 自动更新（19.1 节）。README 与 `tools/make-packages.md` 已按新结论更新。
+> 链接 / 拖入 crx 文件」的正规安装**：Turbo 与 Cent 两种入口都能装（11-07 实测点击
+> 链接、11-09 用户确认拖入文件），且装后自动更新（19.1 节）。README 与
+> `tools/make-packages.md` 已按新结论更新。
 
 Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSING`——Turbo 把它当
 「扩展更新请求」走 InstallVerifier 校验，要求 Google 商店 proof（Web Store 签名），
@@ -392,17 +393,17 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 |---|---|---|
 | 百分 150 | 命令行参数 / 拖拽 | ✅ 弹确认框 → 安装（需开发者模式开） |
 | Turbo 154 | 命令行参数 | ❌ CRX_REQUIRED_PROOF_MISSING（策略拒绝） |
-| Turbo 154 | 点击 crx 链接（扩展页） | ✅ 2026-11-07 实测可用（19.1 节）；当时「拖拽未测、理论预期被拒」的推测作废 |
+| Turbo 154 | 点击 crx 链接 / 拖入 crx 文件 | ✅ 两种入口均可安装（11-07 实测点击链接、11-09 确认拖入文件，见 19.1 节）；当时「理论预期被拒」的推测作废 |
 | Turbo 154 | **--load-extension + 会话内 setEnabled** | ✅ 可靠方案（已验证 E2E） |
 
 **当时（2026-10-22）的推荐分发方式**：百分用 crx 拖拽/命令行；Turbo 用 --load-extension
-脚本方案。**现行方式见 19.1：Turbo / Cent 一律点击 Release 里的 crx 链接安装。**
+脚本方案。**现行方式见 19.1：Turbo / Cent 点击 crx 链接或拖入 crx 文件安装。**
 
 ### 11.5 企业策略白名单方案（ExtensionInstallAllowlist）—— Turbo 上不可行（2026-10-22 历史实测）
 
 > ⚠️「Turbo 剥离 policy 服务、注册表策略读不到」这一观察仍然成立，但由此推出的
 > 「自签 crx 离线安装无绕过手段」已被 19.1 节推翻——**根本不需要策略白名单**，
-> 点击 crx 链接即可正规安装。
+> 点击 crx 链接或拖入 crx 文件即可正规安装。
 
 尝试按 Chrome 企业策略方案放行自签 crx：在 HKLM/HKCU 的
 `Policies\Google\Chrome`、`Policies\Chromium`、`Policies\Turbo`、`Policies\TurboX`
@@ -415,7 +416,7 @@ Turbo 154 接受 crx 路径作命令行参数，但报 `CRX_REQUIRED_PROOF_MISSI
 结论：
 - **百分 150**：策略/开发者模式路径均可装自签 crx ✅
 - **Turbo 154**：policy 服务被剥离、注册表策略无效 ✅（观察仍成立）；但自签 crx
-  **不需要**策略放行，点击 crx 链接即可安装（19.1 节）——当时的「只能 --load-extension」结论作废 ❌
+  **不需要**策略放行，点击 crx 链接或拖入 crx 文件即可安装（19.1 节）——当时的「只能 --load-extension」结论作废 ❌
 - 已在 Turbo 官方 issue #724 补充该测试结果（仅针对「crx 作命令行参数」路径）
 
 ## 12. Quetta（模拟器）与 Firefox（桌面）补测 —— 2026-10-22 追加
@@ -1024,14 +1025,18 @@ grep -o "/log/[^ ]*" webdav.log | python -c "import sys,urllib.parse;[print(urll
 
 | 项 | 结论 |
 |---|---|
-| 安装方式 | 扩展页开启「开发者模式」→ **点击 Releases 里的 .crx 链接** → 确认安装 |
+| 安装方式 | 扩展页开启「开发者模式」→ **点击 Releases 里的 .crx 链接** 或 **把下载好的 .crx 文件拖入扩展页** → 确认安装（两种入口等效） |
 | 适用载体 | **Turbo 154 与 Cent（百分）150 均通过**；装后为 INTERNAL（`location:1`，`Default/Extensions/<id>/<ver>_1`），重启持久 ENABLED |
 | 自动更新 | manifest 的 `update_url` → `docs/update.xml`；每次 Release 由 `davsync-update-feed.yml` 自动改写 feed（14.3 节），已装扩展自动升级，无需重装 |
 | 扩展 ID | `odecihgahfphabajblgnmopeibmkhifp`（key 派生，全平台一致） |
 
+用户 2026-11-09 补充确认：**拖入 crx 文件与点击链接等效，同样可装**；11.4 表格里
+「拖拽未测、理论预期被拒」的推测就此作废。两种入口装完状态一致（INTERNAL / 持久
+ENABLED），区别只在用户怎么把 crx 交给扩展页。
+
 **与 11.4 的差异从何而来**：11.4 测的是「把 crx 路径作为浏览器启动命令行参数」，
 Turbo 把它当作**扩展更新请求**送进 InstallVerifier，要求 Web Store proof，于是报
-`CRX_REQUIRED_PROOF_MISSING`；点击 crx 链接走常规安装路径，不受该校验影响。
+`CRX_REQUIRED_PROOF_MISSING`；点击 crx 链接 / 拖入 crx 文件都走常规安装路径，不受该校验影响。
 11.5 观测到的「Turbo 剥离 policy 服务、注册表策略读不到」依然成立，只是**不再需要**
 用 `ExtensionInstallAllowlist` 绕过——开发者模式 + crx 直接安装即可。`--load-extension`
 现在只用于自动化测试的会话级形态，不再是分发方式。
