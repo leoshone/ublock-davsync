@@ -42,7 +42,7 @@
 
 | 产物 | 说明 |
 |---|---|
-| `uBlock0.davsync_v1.75.1.16.chromium.crx` | ⚠️ 历史首版产物，仅存档；**现行安装一律用 Releases 最新版 crx**（Turbo / Cent 扩展页点击或拖入，需开发者模式，支持自动更新） |
+| `uBlock0.davsync_v1.75.1.16.chromium.crx` | ⚠️ 历史首版产物，仅存档；**现行安装一律用 Releases 最新版 crx**（Turbo / Cent 点击 crx 链接，需开发者模式，支持自动更新） |
 | `uBlock0.davsync_v1.75.1.16.chromium.zip` | Kiwi zip 按钮加载 / 手工解压 --load-extension |
 | `uBlock0.davsync_v1.75.1.16.firefox.xpi` | Firefox/gecko 构建。web-ext 临时加载（会话级） |
 | `v1.75.4.103`（Releases） | 当前发行：crx 6.06MB / zip 6.06MB / firefox.xpi 6.10MB；crx 为推荐安装方式 |
@@ -77,7 +77,7 @@
 
 脚本入库后，测试环境重建只需四步：
 1. 装 Cent（`D:\Software\Cent`）或 Turbo——仅浏览器本体；
-2. **重建 INTERNAL 模板 profile**（一次性）：Cent 带 `--user-data-dir=<模板目录>` 启动 → 开发者模式 → 拖入 Release 的 .crx → 关闭。然后把模板路径写入环境变量 `DAVSYNC_PROFILE_TEMPLATE`（浏览器路径可同样用 `DAVSYNC_CENT_EXE` 覆盖默认值）；
+2. **重建 INTERNAL 模板 profile**（一次性）：Cent 带 `--user-data-dir=<模板目录>` 启动 → 开发者模式 → 拖入 Release 的 .crx（测试模板搭建用此法；日常安装为点击 crx 链接）→ 关闭。然后把模板路径写入环境变量 `DAVSYNC_PROFILE_TEMPLATE`（浏览器路径可同样用 `DAVSYNC_CENT_EXE` 覆盖默认值）；
 3. key pem 从 leoshone/secrets 私有库取（`ublock-davsync/davsync-key.pem`）；
 4. `python test/scaffold.py selfcheck` 三关全绿即环境就绪。
 
